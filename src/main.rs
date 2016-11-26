@@ -30,6 +30,8 @@ pub struct App {
     attached_planet: usize
 }
 
+const ATTACHED_HEIGHT: f64 = 75.0;
+
 impl App {
     fn ship_position(&self) -> (f64, f64) {
         let attached_planet = &self.planets[self.attached_planet];
@@ -81,15 +83,20 @@ impl App {
         let (ship_x, ship_y) = self.ship_position();
         let ship_pos = Isometry2::new(Vector2::new(ship_x, ship_y), na::zero());
         for (planet_index, planet) in (&self.planets).iter().enumerate() {
+            if planet_index == self.attached_planet {
+                continue;
+            }
             let planet_ball = Ball::new(50.0);
             let planet_pos = Isometry2::new(
                 Vector2::new(planet.x, planet.y),
                 na::zero());
             let collided = query::contact(&ship_pos, &ship_ball, &planet_pos, &planet_ball, 0.0);
             if let Some(_) = collided {
+                // We are landing on a new planet
                 self.attached_planet = planet_index;
                 self.jumping = false;
-                self.height = 85.0;
+                self.height = ATTACHED_HEIGHT;
+                self.rotation = (ship_y - planet.y).atan2(ship_x - planet.x);
             }
         }
     }
@@ -119,9 +126,11 @@ fn main() {
     let mut gl = GlGraphics::new(opengl);
     let mut app = App {
         jumping: false,
-        height: 85.0,
+        height: ATTACHED_HEIGHT,
         rotation: 0.0,
-        planets: vec![Planet{x: 500.0, y: 500.0}, Planet{x: 800.0, y: 300.0}],
+        planets: vec![Planet{x: 500.0, y: 500.0},
+                        Planet{x: 800.0, y: 300.0},
+                        Planet{x: 300.0, y: 200.0}],
         attached_planet: 0,
     };
 
