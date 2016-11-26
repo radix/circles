@@ -10,7 +10,7 @@ use piston::input::*;
 use glutin_window::GlutinWindow as Window;
 use opengl_graphics::{ GlGraphics, OpenGL };
 
-const SPEED: f64 = 5.0 / 10000000.0;
+const SPEED: f64 = 1000.0;
 
 pub struct App {
     gl: GlGraphics, // OpenGL drawing backend.
@@ -43,9 +43,13 @@ impl App {
         });
     }
 
-    fn update(&mut self, args: &UpdateArgs) {
+    fn update(&mut self, args: &UpdateArgs, up: bool, down: bool, left: bool, right: bool) {
         // Rotate 2 radians per second.
         self.rotation += 2.0 * args.dt;
+        if up { self.y -= args.dt * SPEED; }
+        if down { self.y += args.dt * SPEED; }
+        if left { self.x -= args.dt * SPEED; }
+        if right { self.x += args.dt * SPEED; }
     }
 }
 
@@ -65,7 +69,7 @@ fn main() {
         )
         .opengl(opengl)
         .exit_on_esc(true)
-        .vsync(false)
+        .vsync(true)
         .build()
         .unwrap();
 
@@ -78,16 +82,12 @@ fn main() {
     };
 
     let mut events = window.events().max_fps(1000);
-    let mut last_time = time::precise_time_ns() as f64;
     while let Some(e) = events.next(&mut window) {
-        let new_time = time::precise_time_ns() as f64;
-        let time_delta = new_time - last_time;
-        last_time = new_time;
         if let Some(r) = e.render_args() {
             app.render(&r);
         }
         if let Some(u) = e.update_args() {
-            app.update(&u);
+            app.update(&u, up, down, left, right);
         }
         match e.press_args() {
             Some(Button::Keyboard(Key::Left)) => left = true,
@@ -103,9 +103,5 @@ fn main() {
             Some(Button::Keyboard(Key::Down)) => down = false,
             _ => {}
         }
-        if up { app.y -= time_delta * SPEED; }
-        if down { app.y += time_delta * SPEED; }
-        if left { app.x -= time_delta * SPEED; }
-        if right { app.x += time_delta * SPEED; }
     }
 }
