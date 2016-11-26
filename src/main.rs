@@ -10,13 +10,18 @@ use piston::input::*;
 use glutin_window::GlutinWindow as Window;
 use opengl_graphics::{ GlGraphics, OpenGL };
 
-const SPEED: f64 = 1000.0;
+#[derive(Debug, Clone)]
+struct Planet {
+    x: f64,
+    y: f64,
+}
 
 pub struct App {
     gl: GlGraphics, // OpenGL drawing backend.
     rotation: f64,  // Rotation for the square.
     x: f64,
     y: f64,
+    planets: Vec<Planet>
 }
 
 impl App {
@@ -25,10 +30,14 @@ impl App {
 
         const GREEN: [f32; 4] = [0.0, 1.0, 0.0, 1.0];
         const RED:   [f32; 4] = [1.0, 0.0, 0.0, 1.0];
+        const BLUE:  [f32; 4] = [0.0, 0.0, 1.0, 1.0];
 
         let square = rectangle::square(0.0, 0.0, 50.0);
+        let circle = ellipse::circle(0.0, 0.0, 50.0);
+
         let rotation = self.rotation;
         let (x, y) = (self.x, self.y);
+        let planets = self.planets.clone();
 
         self.gl.draw(args.viewport(), |c, gl| {
             // Clear the screen.
@@ -40,10 +49,15 @@ impl App {
 
             // Draw a box rotating around the middle of the screen.
             rectangle(RED, square, transform, gl);
+            for planet in planets {
+                ellipse(BLUE, circle, c.transform.trans(planet.x, planet.y), gl);
+            }
         });
     }
 
     fn update(&mut self, args: &UpdateArgs, up: bool, down: bool, left: bool, right: bool) {
+        const SPEED: f64 = 1000.0;
+
         // Rotate 2 radians per second.
         self.rotation += 2.0 * args.dt;
         if up { self.y -= args.dt * SPEED; }
@@ -78,7 +92,8 @@ fn main() {
         gl: GlGraphics::new(opengl),
         rotation: 0.0,
         x: 100.0,
-        y: 100.0
+        y: 100.0,
+        planets: vec![Planet{x: 500.0, y: 500.0}, Planet{x: 800.0, y: 300.0}]
     };
 
     let mut events = window.events().max_fps(1000);
