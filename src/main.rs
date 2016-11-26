@@ -21,7 +21,8 @@ pub struct App {
     rotation: f64,  // Rotation for the square.
     x: f64,
     y: f64,
-    planets: Vec<Planet>
+    planets: Vec<Planet>,
+    attached_planet: u32
 }
 
 impl App {
@@ -37,6 +38,8 @@ impl App {
 
         let rotation = self.rotation;
         let (x, y) = (self.x, self.y);
+
+        // XXX: Do I really need to clone these planets?
         let planets = self.planets.clone();
 
         self.gl.draw(args.viewport(), |c, gl| {
@@ -49,6 +52,9 @@ impl App {
 
             // Draw a box rotating around the middle of the screen.
             rectangle(RED, square, transform, gl);
+            // XXX: I can't use `self.planets` here, because we're in a closure here? it actually
+            // complains about self.gl being used. It seems like I *should* be able to refer to the
+            // planets data without having to make an extra copy of it.
             for planet in planets {
                 ellipse(BLUE, circle, c.transform.trans(planet.x, planet.y), gl);
             }
@@ -93,7 +99,8 @@ fn main() {
         rotation: 0.0,
         x: 100.0,
         y: 100.0,
-        planets: vec![Planet{x: 500.0, y: 500.0}, Planet{x: 800.0, y: 300.0}]
+        planets: vec![Planet{x: 500.0, y: 500.0}, Planet{x: 800.0, y: 300.0}],
+        attached_planet: 0,
     };
 
     let mut events = window.events().max_fps(1000);
