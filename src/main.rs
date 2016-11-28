@@ -214,7 +214,10 @@ fn main() {
                 }
                 Button::Mouse(key) => {
                     match key {
-                        MouseButton::Left => shoot = e.mouse_cursor_args(),
+                        MouseButton::Left => {
+                            shoot = e.mouse_cursor_args();
+                            println!("Got shoot event! {:?}", shoot);
+                        }
                         x => println!("Mouse Key {:?}", x),
                     }
                 }
