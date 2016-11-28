@@ -28,6 +28,14 @@ struct Planet {
 }
 
 #[derive(Debug)]
+pub struct Bullet {
+    x: f64,
+    y: f64,
+    dir: f64, // radians
+    speed: f64,
+}
+
+#[derive(Debug)]
 pub struct App {
     rotation: f64, // ship rotation (position on the planet)
     jumping: bool,
@@ -35,6 +43,7 @@ pub struct App {
     planets: Vec<Planet>,
     attached_planet: usize,
     closest_planet_coords: (f64, f64),
+    bullets: Vec<Bullet>,
 }
 
 impl App {
@@ -139,6 +148,7 @@ fn main() {
         .opengl(opengl)
         .exit_on_esc(true)
         .vsync(true)
+        .samples(8)
         .build()
         .unwrap();
 
@@ -148,6 +158,9 @@ fn main() {
         jumping: false,
         height: 75.0,
         rotation: 0.0,
+        attached_planet: 0,
+        closest_planet_coords: (500.0, 500.0),
+        bullets: vec![],
         planets: vec![Planet {
                           x: 500.0,
                           y: 500.0,
@@ -163,8 +176,6 @@ fn main() {
                           y: 200.0,
                           radius: 100.0,
                       }],
-        attached_planet: 0,
-        closest_planet_coords: (500.0, 500.0),
     };
 
     let mut events = window.events().max_fps(1000);
@@ -175,19 +186,23 @@ fn main() {
         if let Some(u) = e.update_args() {
             app.update(&u, up, down, left, right);
         }
-        match e.press_args() {
-            Some(Button::Keyboard(Key::Left)) => left = true,
-            Some(Button::Keyboard(Key::Right)) => right = true,
-            Some(Button::Keyboard(Key::Up)) => up = true,
-            Some(Button::Keyboard(Key::Down)) => down = true,
-            _ => {}
+        if let Some(Button::Keyboard(key)) = e.press_args() {
+            match key {
+                Key::Left | Key::A => left = true,
+                Key::Right | Key::E => right = true,
+                Key::Up | Key::Comma => up = true,
+                Key::Down | Key::O => down = true,
+                _ => {}
+            }
         }
-        match e.release_args() {
-            Some(Button::Keyboard(Key::Left)) => left = false,
-            Some(Button::Keyboard(Key::Right)) => right = false,
-            Some(Button::Keyboard(Key::Up)) => up = false,
-            Some(Button::Keyboard(Key::Down)) => down = false,
-            _ => {}
+        if let Some(Button::Keyboard(key)) = e.release_args() {
+            match key {
+                Key::Left | Key::A => left = false,
+                Key::Right | Key::E => right = false,
+                Key::Up | Key::Comma => up = false,
+                Key::Down | Key::O => down = false,
+                _ => {}
+            }
         }
     }
 }
