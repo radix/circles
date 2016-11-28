@@ -19,6 +19,7 @@ const SHIP_SIZE: f64 = 50.0;
 const SPEED: f64 = 5.0;
 const JUMP_SPEED: f64 = 3.0;
 const AIR_CONTROL_MOD: f64 = 50.0;
+const BULLET_SPEED: f64 = 5.0;
 
 #[derive(Debug)]
 struct Planet {
@@ -76,12 +77,33 @@ impl App {
                 let circle = graphics::ellipse::circle(0.0, 0.0, planet.radius);
                 graphics::ellipse(BLUE, circle, c.transform.trans(planet.x, planet.y), gl);
             }
+            for bullet in &self.bullets {
+                let circle = graphics::ellipse::circle(0.0, 0.0, 1.0);
+                graphics::ellipse(RED, circle, c.transform.trans(bullet.x, bullet.y), gl);
+            }
             let line = [x, y, self.closest_planet_coords.0, self.closest_planet_coords.1];
             graphics::line(GREEN, 1.0, line, c.transform.trans(0.0, 0.0), gl);
         });
     }
 
-    fn update(&mut self, args: &UpdateArgs, up: bool, _down: bool, left: bool, right: bool) {
+    fn update(&mut self,
+              args: &UpdateArgs,
+              up: bool,
+              _down: bool,
+              left: bool,
+              right: bool,
+              shoot: Option<[f64; 2]>) {
+        let (ship_x, ship_y) = self.ship_position();
+        if let Some(target) = shoot {
+            let angle = (ship_y - target[0]).atan2(ship_x - target[1]);
+            let bullet = Bullet {
+                x: ship_x,
+                y: ship_y,
+                dir: angle,
+                speed: BULLET_SPEED,
+            };
+            self.bullets.push(bullet);
+        }
         if !self.jumping {
             if left {
                 self.rotation -= SPEED * args.dt;
@@ -92,8 +114,7 @@ impl App {
             if up {
                 self.jumping = true;
             }
-        }
-        if self.jumping {
+        } else {
             self.height += JUMP_SPEED;
             if left {
                 self.rotation -= SPEED * (AIR_CONTROL_MOD / self.height) * args.dt
@@ -104,7 +125,6 @@ impl App {
         }
 
         let ship_ball = Ball::new(SHIP_SIZE);
-        let (ship_x, ship_y) = self.ship_position();
         let ship_pos = Isometry2::new(Vector2::new(ship_x, ship_y), na::zero());
         let mut closest_planet_distance = self.height;
         for (planet_index, planet) in (&self.planets).iter().enumerate() {
@@ -180,29 +200,46 @@ fn main() {
 
     let mut events = window.events().max_fps(1000);
     while let Some(e) = events.next(&mut window) {
+        let mut shoot: Option<[f64; 2]> = None;
+        if let Some(press) = e.press_args() {
+            match press {
+                Button::Keyboard(key) => {
+                    match key {
+                        Key::Left | Key::A => left = true,
+                        Key::Right | Key::E => right = true,
+                        Key::Up | Key::Comma => up = true,
+                        Key::Down | Key::O => down = true,
+                        x => println!("Keyboard Key {:?}", x),
+                    }
+                }
+                Button::Mouse(key) => {
+                    match key {
+                        MouseButton::Left => shoot = e.mouse_cursor_args(),
+                        x => println!("Mouse Key {:?}", x),
+                    }
+                }
+                x => println!("Unknown Event {:?}", x),
+            }
+        }
+        if let Some(press) = e.release_args() {
+            match press {
+                Button::Keyboard(key) => {
+                    match key {
+                        Key::Left | Key::A => left = false,
+                        Key::Right | Key::E => right = false,
+                        Key::Up | Key::Comma => up = false,
+                        Key::Down | Key::O => down = false,
+                        _ => {}
+                    }
+                }
+                _ => {}
+            }
+        }
         if let Some(r) = e.render_args() {
             app.render(&mut gl, &r);
         }
         if let Some(u) = e.update_args() {
-            app.update(&u, up, down, left, right);
-        }
-        if let Some(Button::Keyboard(key)) = e.press_args() {
-            match key {
-                Key::Left | Key::A => left = true,
-                Key::Right | Key::E => right = true,
-                Key::Up | Key::Comma => up = true,
-                Key::Down | Key::O => down = true,
-                _ => {}
-            }
-        }
-        if let Some(Button::Keyboard(key)) = e.release_args() {
-            match key {
-                Key::Left | Key::A => left = false,
-                Key::Right | Key::E => right = false,
-                Key::Up | Key::Comma => up = false,
-                Key::Down | Key::O => down = false,
-                _ => {}
-            }
+            app.update(&u, up, down, left, right, shoot);
         }
     }
 }
