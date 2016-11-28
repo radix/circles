@@ -10,7 +10,7 @@ use piston::window::WindowSettings;
 use piston::event_loop::*;
 use piston::input::*;
 use glutin_window::GlutinWindow as Window;
-use opengl_graphics::{ GlGraphics, OpenGL };
+use opengl_graphics::{GlGraphics, OpenGL};
 use ncollide::query;
 use ncollide::shape::Ball;
 use na::{Isometry2, Vector2};
@@ -29,7 +29,7 @@ struct Planet {
 
 #[derive(Debug)]
 pub struct App {
-    rotation: f64,  // ship rotation (position on the planet)
+    rotation: f64, // ship rotation (position on the planet)
     jumping: bool,
     height: f64,
     planets: Vec<Planet>,
@@ -49,8 +49,8 @@ impl App {
         use graphics::*;
 
         const GREEN: [f32; 4] = [0.0, 1.0, 0.0, 1.0];
-        const RED:   [f32; 4] = [1.0, 0.0, 0.0, 1.0];
-        const BLUE:  [f32; 4] = [0.0, 0.0, 1.0, 1.0];
+        const RED: [f32; 4] = [1.0, 0.0, 0.0, 1.0];
+        const BLUE: [f32; 4] = [0.0, 0.0, 1.0, 1.0];
         const BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
 
         let square = graphics::rectangle::square(0.0, 0.0, SHIP_SIZE);
@@ -58,9 +58,10 @@ impl App {
         let (x, y) = self.ship_position();
         gl.draw(args.viewport(), |c, gl| {
             clear(BLACK, gl);
-            let ship_transform = c.transform.trans(x, y)
-                                       .rot_rad(self.rotation)
-                                       .trans(-(SHIP_SIZE/2.0), -(SHIP_SIZE/2.0));
+            let ship_transform = c.transform
+                .trans(x, y)
+                .rot_rad(self.rotation)
+                .trans(-(SHIP_SIZE / 2.0), -(SHIP_SIZE / 2.0));
             graphics::rectangle(RED, square, ship_transform, gl);
             for planet in &self.planets {
                 let circle = graphics::ellipse::circle(0.0, 0.0, planet.radius);
@@ -73,14 +74,24 @@ impl App {
 
     fn update(&mut self, args: &UpdateArgs, up: bool, _down: bool, left: bool, right: bool) {
         if !self.jumping {
-            if left { self.rotation -= SPEED * args.dt; }
-            if right { self.rotation += SPEED * args.dt; }
-            if up { self.jumping = true; }
+            if left {
+                self.rotation -= SPEED * args.dt;
+            }
+            if right {
+                self.rotation += SPEED * args.dt;
+            }
+            if up {
+                self.jumping = true;
+            }
         }
         if self.jumping {
             self.height += JUMP_SPEED;
-            if left { self.rotation -= SPEED * (AIR_CONTROL_MOD / self.height) * args.dt}
-            if right { self.rotation += SPEED * (AIR_CONTROL_MOD / self.height) * args.dt}
+            if left {
+                self.rotation -= SPEED * (AIR_CONTROL_MOD / self.height) * args.dt
+            }
+            if right {
+                self.rotation += SPEED * (AIR_CONTROL_MOD / self.height) * args.dt
+            }
         }
 
         let ship_ball = Ball::new(SHIP_SIZE);
@@ -89,9 +100,7 @@ impl App {
         let mut closest_planet_distance = self.height;
         for (planet_index, planet) in (&self.planets).iter().enumerate() {
             let planet_ball = Ball::new(planet.radius);
-            let planet_pos = Isometry2::new(
-                Vector2::new(planet.x, planet.y),
-                na::zero());
+            let planet_pos = Isometry2::new(Vector2::new(planet.x, planet.y), na::zero());
 
             // Check if this is the closest planet
             let distance = query::distance(&ship_pos, &ship_ball, &planet_pos, &planet_ball);
@@ -126,10 +135,7 @@ fn main() {
     let mut up = false;
 
     // Create an Glutin window.
-    let mut window: Window = WindowSettings::new(
-            "spinning-square",
-            [1024, 768]
-        )
+    let mut window: Window = WindowSettings::new("spinning-square", [1024, 768])
         .opengl(opengl)
         .exit_on_esc(true)
         .vsync(true)
@@ -142,9 +148,21 @@ fn main() {
         jumping: false,
         height: 75.0,
         rotation: 0.0,
-        planets: vec![Planet{x: 500.0, y: 500.0, radius: 50.0},
-                        Planet{x: 800.0, y: 300.0, radius: 35.0},
-                        Planet{x: 300.0, y: 200.0, radius: 100.0}],
+        planets: vec![Planet {
+                          x: 500.0,
+                          y: 500.0,
+                          radius: 50.0,
+                      },
+                      Planet {
+                          x: 800.0,
+                          y: 300.0,
+                          radius: 35.0,
+                      },
+                      Planet {
+                          x: 300.0,
+                          y: 200.0,
+                          radius: 100.0,
+                      }],
         attached_planet: 0,
         closest_planet_coords: (500.0, 500.0),
     };
