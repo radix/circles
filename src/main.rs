@@ -3,6 +3,7 @@ extern crate time;
 extern crate ncollide;
 extern crate nalgebra as na;
 
+use std::f64::consts::PI;
 use piston_window::*;
 use ncollide::query;
 use ncollide::shape::Ball;
@@ -12,7 +13,8 @@ const SHIP_SIZE: f64 = 50.0;
 const SPEED: f64 = 5.0;
 const JUMP_SPEED: f64 = 3.0;
 const AIR_CONTROL_MOD: f64 = 50.0;
-const BULLET_SPEED: f64 = 5.0;
+const BULLET_SPEED: f64 = 500.0;
+const BULLET_SIZE: f64 = 5.0;
 
 #[derive(Debug)]
 struct Planet {
@@ -69,7 +71,7 @@ impl App {
                 ellipse(BLUE, circle, c.transform.trans(planet.x, planet.y), g);
             }
             for bullet in &self.bullets {
-                let circle = ellipse::circle(0.0, 0.0, 1.0);
+                let circle = ellipse::circle(0.0, 0.0, BULLET_SIZE);
                 ellipse(RED, circle, c.transform.trans(bullet.x, bullet.y), g);
             }
             let beam = [x, y, self.closest_planet_coords.0, self.closest_planet_coords.1];
@@ -83,10 +85,10 @@ impl App {
               _down: bool,
               left: bool,
               right: bool,
-              shoot: Option<[f64; 2]>) {
+              shoot_target: Option<[f64; 2]>) {
         let (ship_x, ship_y) = self.ship_position();
-        if let Some(target) = shoot {
-            let angle = (ship_y - target[0]).atan2(ship_x - target[1]);
+        if let Some(target) = shoot_target {
+            let angle = (target[1] - ship_y).atan2(target[0] - ship_x);
             let bullet = Bullet {
                 x: ship_x,
                 y: ship_y,
@@ -95,6 +97,11 @@ impl App {
             };
             self.bullets.push(bullet);
         }
+        for bullet in &mut self.bullets {
+            bullet.x = bullet.x + (bullet.speed * args.dt * bullet.dir.cos());
+            bullet.y = bullet.y + (bullet.speed * args.dt * bullet.dir.sin());
+        }
+
         if !self.jumping {
             if left {
                 self.rotation -= SPEED * args.dt;
@@ -128,19 +135,25 @@ impl App {
                 closest_planet_distance = distance;
                 self.closest_planet_coords = (planet.x, planet.y);
             }
+            if planet_index != self.attached_planet {
+                // Check if we've collided with the planet
+                let collided =
+                    query::contact(&ship_pos, &ship_ball, &planet_pos, &planet_ball, 0.0);
+                if let Some(_) = collided {
+                    // We are landing on a new planet
+                    self.attached_planet = planet_index;
+                    self.jumping = false;
+                    self.height = planet.radius + (SHIP_SIZE / 2.0);
+                    self.rotation = (ship_y - planet.y).atan2(ship_x - planet.x);
+                }
+            }
+        }
 
-            if planet_index == self.attached_planet {
-                continue;
-            }
-            // Check if we've collided with the planet
-            let collided = query::contact(&ship_pos, &ship_ball, &planet_pos, &planet_ball, 0.0);
-            if let Some(_) = collided {
-                // We are landing on a new planet
-                self.attached_planet = planet_index;
-                self.jumping = false;
-                self.height = planet.radius + (SHIP_SIZE / 2.0);
-                self.rotation = (ship_y - planet.y).atan2(ship_x - planet.x);
-            }
+        if self.rotation > PI {
+            self.rotation -= 2.0 * PI
+        }
+        if self.rotation < -PI {
+            self.rotation += 2.0 * PI
         }
     }
 }
@@ -183,8 +196,14 @@ fn main() {
                       }],
     };
 
+    let mut cursor: Option<[f64; 2]> = None;
+    let mut shoot_target: Option<[f64; 2]> = None;
+
     while let Some(e) = window.next() {
-        let mut shoot: Option<[f64; 2]> = None;
+        cursor = match e.mouse_cursor_args() {
+            None => cursor,
+            x => x,
+        };
         if let Some(press) = e.press_args() {
             match press {
                 Button::Keyboard(key) => {
@@ -199,8 +218,7 @@ fn main() {
                 Button::Mouse(key) => {
                     match key {
                         MouseButton::Left => {
-                            shoot = e.mouse_cursor_args();
-                            println!("Got shoot event! {:?}", shoot);
+                            shoot_target = cursor;
                         }
                         x => println!("Mouse Key {:?}", x),
                     }
@@ -222,11 +240,13 @@ fn main() {
                 _ => {}
             }
         }
-        if let Some(r) = e.render_args() {
-            app.render(&mut window, &e);
-        }
         if let Some(u) = e.update_args() {
-            app.update(&u, up, down, left, right, shoot);
+            app.update(&u, up, down, left, right, shoot_target);
+            if let Some(_) = shoot_target {
+                // Only shoot once per click! Argh.
+                shoot_target = None;
+            }
         }
+        app.render(&mut window, &e);
     }
 }
