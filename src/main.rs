@@ -17,16 +17,26 @@ const BULLET_SPEED: f64 = 1000.0;
 const BULLET_SIZE: f64 = 5.0;
 
 #[derive(Debug)]
-struct Planet {
+struct Point {
     x: f64,
     y: f64,
+}
+
+impl Point {
+    fn new(x: f64, y: f64) -> Point {
+        Point { x: x, y: y }
+    }
+}
+
+#[derive(Debug)]
+struct Planet {
+    pos: Point,
     radius: f64,
 }
 
 #[derive(Debug)]
 pub struct Bullet {
-    x: f64,
-    y: f64,
+    pos: Point,
     dir: f64, // radians
     speed: f64,
 }
@@ -45,8 +55,8 @@ pub struct App {
 impl App {
     fn ship_position(&self) -> (f64, f64) {
         let attached_planet = &self.planets[self.attached_planet];
-        let x = attached_planet.x + (self.rotation.cos() * self.height);
-        let y = attached_planet.y + (self.rotation.sin() * self.height);
+        let x = attached_planet.pos.x + (self.rotation.cos() * self.height);
+        let y = attached_planet.pos.y + (self.rotation.sin() * self.height);
         (x, y)
     }
 
@@ -68,11 +78,17 @@ impl App {
             rectangle(RED, square, ship_transform, g);
             for planet in &self.planets {
                 let circle = ellipse::circle(0.0, 0.0, planet.radius);
-                ellipse(BLUE, circle, c.transform.trans(planet.x, planet.y), g);
+                ellipse(BLUE,
+                        circle,
+                        c.transform.trans(planet.pos.x, planet.pos.y),
+                        g);
             }
             for bullet in &self.bullets {
                 let circle = ellipse::circle(0.0, 0.0, BULLET_SIZE);
-                ellipse(RED, circle, c.transform.trans(bullet.x, bullet.y), g);
+                ellipse(RED,
+                        circle,
+                        c.transform.trans(bullet.pos.x, bullet.pos.y),
+                        g);
             }
             let beam = [x, y, self.closest_planet_coords.0, self.closest_planet_coords.1];
             line(GREEN, 1.0, beam, c.transform.trans(0.0, 0.0), g);
@@ -90,24 +106,24 @@ impl App {
         if let Some(target) = shoot_target {
             let angle = (target[1] - ship_y).atan2(target[0] - ship_x);
             let bullet = Bullet {
-                x: ship_x,
-                y: ship_y,
+                pos: Point::new(ship_x, ship_y),
                 dir: angle,
                 speed: BULLET_SPEED,
             };
             self.bullets.push(bullet);
         }
+
         let mut cull_bullets = vec![];
+        let mut cull_counter = 0;
         for (idx, bullet) in (&mut self.bullets).iter_mut().enumerate() {
-            bullet.x = bullet.x + (bullet.speed * args.dt * bullet.dir.cos());
-            bullet.y = bullet.y + (bullet.speed * args.dt * bullet.dir.sin());
-            if (bullet.x - ship_x).abs() > 5000.0 {
-                cull_bullets.push(idx);
-            }
-            if (bullet.y - ship_y).abs() > 5000.0 {
-                cull_bullets.push(idx);
+            bullet.pos.x = bullet.pos.x + (bullet.speed * args.dt * bullet.dir.cos());
+            bullet.pos.y = bullet.pos.y + (bullet.speed * args.dt * bullet.dir.sin());
+            if (bullet.pos.x - ship_x).abs() > 5000.0 || (bullet.pos.y - ship_y).abs() > 5000.0 {
+                cull_bullets.push(idx - cull_counter);
+                cull_counter += 1;
             }
         }
+
         for cull_idx in cull_bullets {
             self.bullets.remove(cull_idx);
         }
@@ -137,13 +153,13 @@ impl App {
         let mut closest_planet_distance = self.height;
         for (planet_index, planet) in (&self.planets).iter().enumerate() {
             let planet_ball = Ball::new(planet.radius);
-            let planet_pos = Isometry2::new(Vector2::new(planet.x, planet.y), na::zero());
+            let planet_pos = Isometry2::new(Vector2::new(planet.pos.x, planet.pos.y), na::zero());
 
             // Check if this is the closest planet
             let distance = query::distance(&ship_pos, &ship_ball, &planet_pos, &planet_ball);
             if distance < closest_planet_distance {
                 closest_planet_distance = distance;
-                self.closest_planet_coords = (planet.x, planet.y);
+                self.closest_planet_coords = (planet.pos.x, planet.pos.y);
             }
             if planet_index != self.attached_planet {
                 // Check if we've collided with the planet
@@ -154,7 +170,7 @@ impl App {
                     self.attached_planet = planet_index;
                     self.jumping = false;
                     self.height = planet.radius + (SHIP_SIZE / 2.0);
-                    self.rotation = (ship_y - planet.y).atan2(ship_x - planet.x);
+                    self.rotation = (ship_y - planet.pos.y).atan2(ship_x - planet.pos.x);
                 }
             }
         }
@@ -190,18 +206,15 @@ fn main() {
         closest_planet_coords: (500.0, 500.0),
         bullets: vec![],
         planets: vec![Planet {
-                          x: 500.0,
-                          y: 500.0,
+                          pos: Point::new(500.0, 500.0),
                           radius: 50.0,
                       },
                       Planet {
-                          x: 800.0,
-                          y: 300.0,
+                          pos: Point::new(200.0, 800.0),
                           radius: 35.0,
                       },
                       Planet {
-                          x: 300.0,
-                          y: 200.0,
+                          pos: Point::new(300.0, 200.0),
                           radius: 100.0,
                       }],
     };
@@ -219,9 +232,9 @@ fn main() {
                 Button::Keyboard(key) => {
                     match key {
                         Key::Left | Key::A => left = true,
-                        Key::Right | Key::E => right = true,
-                        Key::Up | Key::Comma => up = true,
-                        Key::Down | Key::O => down = true,
+                        Key::Right | Key::E | Key::D => right = true,
+                        Key::Up | Key::Comma | Key::W => up = true,
+                        Key::Down | Key::O | Key::S => down = true,
                         x => println!("Keyboard Key {:?}", x),
                     }
                 }
@@ -241,9 +254,9 @@ fn main() {
                 Button::Keyboard(key) => {
                     match key {
                         Key::Left | Key::A => left = false,
-                        Key::Right | Key::E => right = false,
-                        Key::Up | Key::Comma => up = false,
-                        Key::Down | Key::O => down = false,
+                        Key::Right | Key::E | Key::D => right = false,
+                        Key::Up | Key::Comma | Key::W => up = false,
+                        Key::Down | Key::O | Key::S => down = false,
                         _ => {}
                     }
                 }
@@ -253,7 +266,7 @@ fn main() {
         if let Some(u) = e.update_args() {
             app.update(&u, up, down, left, right, shoot_target);
             if let Some(_) = shoot_target {
-                // Only shoot once per click! Argh.
+                // Only shoot once per click!
                 shoot_target = None;
             }
         }
