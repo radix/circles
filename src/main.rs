@@ -1,16 +1,9 @@
-extern crate piston;
-extern crate graphics;
-extern crate glutin_window;
-extern crate opengl_graphics;
+extern crate piston_window;
 extern crate time;
 extern crate ncollide;
 extern crate nalgebra as na;
 
-use piston::window::WindowSettings;
-use piston::event_loop::*;
-use piston::input::*;
-use glutin_window::GlutinWindow as Window;
-use opengl_graphics::{GlGraphics, OpenGL};
+use piston_window::*;
 use ncollide::query;
 use ncollide::shape::Ball;
 use na::{Isometry2, Vector2};
@@ -55,34 +48,32 @@ impl App {
         (x, y)
     }
 
-    fn render(&mut self, mut gl: &mut GlGraphics, args: &RenderArgs) {
-        use graphics::*;
-
+    fn render(&mut self, mut window: &mut PistonWindow, event: &Event) {
         const GREEN: [f32; 4] = [0.0, 1.0, 0.0, 1.0];
         const RED: [f32; 4] = [1.0, 0.0, 0.0, 1.0];
         const BLUE: [f32; 4] = [0.0, 0.0, 1.0, 1.0];
         const BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
 
-        let square = graphics::rectangle::square(0.0, 0.0, SHIP_SIZE);
+        let square = rectangle::square(0.0, 0.0, SHIP_SIZE);
 
         let (x, y) = self.ship_position();
-        gl.draw(args.viewport(), |c, gl| {
-            clear(BLACK, gl);
+        window.draw_2d(event, |c, g| {
+            clear(BLACK, g);
             let ship_transform = c.transform
                 .trans(x, y)
                 .rot_rad(self.rotation)
                 .trans(-(SHIP_SIZE / 2.0), -(SHIP_SIZE / 2.0));
-            graphics::rectangle(RED, square, ship_transform, gl);
+            rectangle(RED, square, ship_transform, g);
             for planet in &self.planets {
-                let circle = graphics::ellipse::circle(0.0, 0.0, planet.radius);
-                graphics::ellipse(BLUE, circle, c.transform.trans(planet.x, planet.y), gl);
+                let circle = ellipse::circle(0.0, 0.0, planet.radius);
+                ellipse(BLUE, circle, c.transform.trans(planet.x, planet.y), g);
             }
             for bullet in &self.bullets {
-                let circle = graphics::ellipse::circle(0.0, 0.0, 1.0);
-                graphics::ellipse(RED, circle, c.transform.trans(bullet.x, bullet.y), gl);
+                let circle = ellipse::circle(0.0, 0.0, 1.0);
+                ellipse(RED, circle, c.transform.trans(bullet.x, bullet.y), g);
             }
-            let line = [x, y, self.closest_planet_coords.0, self.closest_planet_coords.1];
-            graphics::line(GREEN, 1.0, line, c.transform.trans(0.0, 0.0), gl);
+            let beam = [x, y, self.closest_planet_coords.0, self.closest_planet_coords.1];
+            line(GREEN, 1.0, beam, c.transform.trans(0.0, 0.0), g);
         });
     }
 
@@ -155,17 +146,12 @@ impl App {
 }
 
 fn main() {
-    // Change this to OpenGL::V2_1 if not working.
-    let opengl = OpenGL::V3_2;
-
     let mut left = false;
     let mut right = false;
     let mut down = false;
     let mut up = false;
 
-    // Create an Glutin window.
-    let mut window: Window = WindowSettings::new("spinning-square", [1024, 768])
-        .opengl(opengl)
+    let mut window: PistonWindow = WindowSettings::new("spinning-square", [1024, 768])
         .exit_on_esc(true)
         .vsync(true)
         .samples(8)
@@ -173,7 +159,6 @@ fn main() {
         .unwrap();
 
     // Create a new game and run it.
-    let mut gl = GlGraphics::new(opengl);
     let mut app = App {
         jumping: false,
         height: 75.0,
@@ -198,8 +183,7 @@ fn main() {
                       }],
     };
 
-    let mut events = window.events().max_fps(1000);
-    while let Some(e) = events.next(&mut window) {
+    while let Some(e) = window.next() {
         let mut shoot: Option<[f64; 2]> = None;
         if let Some(press) = e.press_args() {
             match press {
@@ -239,7 +223,7 @@ fn main() {
             }
         }
         if let Some(r) = e.render_args() {
-            app.render(&mut gl, &r);
+            app.render(&mut window, &e);
         }
         if let Some(u) = e.update_args() {
             app.update(&u, up, down, left, right, shoot);
