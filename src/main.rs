@@ -13,7 +13,7 @@ const SHIP_SIZE: f64 = 50.0;
 const SPEED: f64 = 5.0;
 const JUMP_SPEED: f64 = 3.0;
 const AIR_CONTROL_MOD: f64 = 50.0;
-const BULLET_SPEED: f64 = 500.0;
+const BULLET_SPEED: f64 = 1000.0;
 const BULLET_SIZE: f64 = 5.0;
 
 #[derive(Debug)]
@@ -97,9 +97,19 @@ impl App {
             };
             self.bullets.push(bullet);
         }
-        for bullet in &mut self.bullets {
+        let mut cull_bullets = vec![];
+        for (idx, bullet) in (&mut self.bullets).iter_mut().enumerate() {
             bullet.x = bullet.x + (bullet.speed * args.dt * bullet.dir.cos());
             bullet.y = bullet.y + (bullet.speed * args.dt * bullet.dir.sin());
+            if (bullet.x - ship_x).abs() > 5000.0 {
+                cull_bullets.push(idx);
+            }
+            if (bullet.y - ship_y).abs() > 5000.0 {
+                cull_bullets.push(idx);
+            }
+        }
+        for cull_idx in cull_bullets {
+            self.bullets.remove(cull_idx);
         }
 
         if !self.jumping {
