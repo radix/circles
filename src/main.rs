@@ -15,6 +15,7 @@ const JUMP_SPEED: f64 = 3.0;
 const AIR_CONTROL_MOD: f64 = 50.0;
 const BULLET_SPEED: f64 = 1000.0;
 const BULLET_SIZE: f64 = 5.0;
+const ACCELERATION: f64 = 5.0;
 
 #[derive(Debug, Clone, Copy)]
 struct Point {
@@ -44,12 +45,14 @@ pub struct Bullet {
 #[derive(Debug)]
 pub struct App {
     rotation: f64, // ship rotation (position on the planet)
-    ship_pos: Point,
+    ship_pos: Point, // redundant data, optimization
     jumping: bool,
+    exit_speed: f64,
     height: f64,
     planets: Vec<Planet>,
     attached_planet: usize,
-    closest_planet_coords: (f64, f64),
+    closest_planet_coords: (f64, f64), // redundant data, optimization
+    // NES-style would be to make this a [(f64, f64); 3], so only three bullets can exist at once
     bullets: Vec<Bullet>,
 }
 
@@ -83,27 +86,31 @@ impl App {
                         c.transform.trans(bullet.pos.x, bullet.pos.y),
                         g);
             }
-            let beam = [self.ship_pos.x,
-                        self.ship_pos.y,
-                        self.closest_planet_coords.0,
-                        self.closest_planet_coords.1];
-            line(GREEN, 1.0, beam, c.transform.trans(0.0, 0.0), g);
+            let nearest_beam = [self.ship_pos.x,
+                                self.ship_pos.y,
+                                self.closest_planet_coords.0,
+                                self.closest_planet_coords.1];
+            line(GREEN, 1.0, nearest_beam, c.transform.trans(0.0, 0.0), g);
+
+            let attached = &self.planets[self.attached_planet];
+            let attached_beam = [self.ship_pos.x, self.ship_pos.y, attached.pos.x, attached.pos.y];
+            line(BLUE, 1.0, attached_beam, c.transform.trans(0.0, 0.0), g);
         });
     }
 
     fn update(&mut self,
               args: &UpdateArgs,
               up: bool,
-              _down: bool,
+              down: bool,
               left: bool,
               right: bool,
-              shoot_target: Option<[f64; 2]>) {
+              shoot_target: Option<Point>) {
         let attached_planet = &self.planets[self.attached_planet];
         self.ship_pos.x = attached_planet.pos.x + (self.rotation.cos() * self.height);
         self.ship_pos.y = attached_planet.pos.y + (self.rotation.sin() * self.height);
 
         if let Some(target) = shoot_target {
-            let angle = (target[1] - self.ship_pos.y).atan2(target[0] - self.ship_pos.x);
+            let angle = (target.y - self.ship_pos.y).atan2(target.x - self.ship_pos.x);
             let bullet = Bullet {
                 pos: self.ship_pos,
                 dir: angle,
@@ -117,10 +124,12 @@ impl App {
         for (idx, bullet) in (&mut self.bullets).iter_mut().enumerate() {
             bullet.pos.x = bullet.pos.x + (bullet.speed * args.dt * bullet.dir.cos());
             bullet.pos.y = bullet.pos.y + (bullet.speed * args.dt * bullet.dir.sin());
-            // kind of a dumb hack to determine when to cull bullets. It'd be better if we had a
-            // concept of the "current view" (+ margin)
+            // kind of a dumb hack to determine when to cull bullets. It'd be better if we had the
+            // current view's bounding box (+ margin)
             if (bullet.pos.x - self.ship_pos.x).abs() > 5000.0 ||
                (bullet.pos.y - self.ship_pos.y).abs() > 5000.0 {
+                // rejigger the index so when we delete the items they compensate for previous
+                // deletions
                 cull_bullets.push(idx - cull_counter);
                 cull_counter += 1;
             }
@@ -139,18 +148,25 @@ impl App {
             }
             if up {
                 self.jumping = true;
+                self.exit_speed = JUMP_SPEED;
             }
         } else {
-            self.height += JUMP_SPEED;
+            self.height += self.exit_speed;
             if left {
                 self.rotation -= SPEED * (AIR_CONTROL_MOD / self.height) * args.dt
             }
             if right {
                 self.rotation += SPEED * (AIR_CONTROL_MOD / self.height) * args.dt
             }
+            if down {
+                self.exit_speed -= ACCELERATION * args.dt;
+            }
+            if up {
+                self.exit_speed += ACCELERATION * args.dt;
+            }
         }
 
-        let ship_ball = Ball::new(SHIP_SIZE);
+        let ship_ball = Ball::new(SHIP_SIZE / 2.0);
         let ship_pos = Isometry2::new(Vector2::new(self.ship_pos.x, self.ship_pos.y), na::zero());
         let mut closest_planet_distance = self.height;
         for (planet_index, planet) in (&self.planets).iter().enumerate() {
@@ -163,18 +179,15 @@ impl App {
                 closest_planet_distance = distance;
                 self.closest_planet_coords = (planet.pos.x, planet.pos.y);
             }
-            if planet_index != self.attached_planet {
-                // Check if we've collided with the planet
-                let collided =
-                    query::contact(&ship_pos, &ship_ball, &planet_pos, &planet_ball, 0.0);
-                if let Some(_) = collided {
-                    // We are landing on a new planet
-                    self.attached_planet = planet_index;
-                    self.jumping = false;
-                    self.height = planet.radius + (SHIP_SIZE / 2.0);
-                    self.rotation = (self.ship_pos.y - planet.pos.y)
-                        .atan2(self.ship_pos.x - planet.pos.x);
-                }
+            let collided = query::contact(&ship_pos, &ship_ball, &planet_pos, &planet_ball, -1.0);
+            if let Some(_) = collided {
+                // We are landing on a new planet
+                self.attached_planet = planet_index;
+                self.jumping = false;
+                self.height = planet.radius + (SHIP_SIZE / 2.0);
+                self.rotation = (self.ship_pos.y - planet.pos.y)
+                    .atan2(self.ship_pos.x - planet.pos.x);
+                self.exit_speed = 0.0;
             }
         }
 
@@ -203,6 +216,7 @@ fn main() {
     // Create a new game and run it.
     let mut app = App {
         jumping: false,
+        exit_speed: 0.0,
         ship_pos: Point::new(0.0, 0.0),
         height: 75.0,
         rotation: 0.0,
@@ -224,7 +238,7 @@ fn main() {
     };
 
     let mut cursor: Option<[f64; 2]> = None;
-    let mut shoot_target: Option<[f64; 2]> = None;
+    let mut shoot_target: Option<Point> = None;
 
     while let Some(e) = window.next() {
         cursor = match e.mouse_cursor_args() {
@@ -245,7 +259,7 @@ fn main() {
                 Button::Mouse(key) => {
                     match key {
                         MouseButton::Left => {
-                            shoot_target = cursor;
+                            shoot_target = cursor.map(|c| Point::new(c[0], c[1]));
                         }
                         x => println!("Mouse Key {:?}", x),
                     }
