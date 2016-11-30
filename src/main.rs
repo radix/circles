@@ -16,6 +16,7 @@ const AIR_CONTROL_MOD: f64 = 50.0;
 const BULLET_SPEED: f64 = 1000.0;
 const BULLET_SIZE: f64 = 5.0;
 const ACCELERATION: f64 = 5.0;
+const FIRE_INTERVAL: u64 = 100000000; // nanoseconds
 
 #[derive(Debug, Clone, Copy)]
 struct Point {
@@ -54,6 +55,7 @@ pub struct App {
     closest_planet_coords: (f64, f64), // redundant data, optimization
     // NES-style would be to make this a [(f64, f64); 3], so only three bullets can exist at once
     bullets: Vec<Bullet>,
+    last_fire: u64,
 }
 
 impl App {
@@ -110,13 +112,17 @@ impl App {
         self.ship_pos.y = attached_planet.pos.y + (self.rotation.sin() * self.height);
 
         if let Some(target) = shoot_target {
-            let angle = (target.y - self.ship_pos.y).atan2(target.x - self.ship_pos.x);
-            let bullet = Bullet {
-                pos: self.ship_pos,
-                dir: angle,
-                speed: BULLET_SPEED,
-            };
-            self.bullets.push(bullet);
+            let current_time = time::precise_time_ns();
+            if current_time - self.last_fire > FIRE_INTERVAL {
+                let angle = (target.y - self.ship_pos.y).atan2(target.x - self.ship_pos.x);
+                let bullet = Bullet {
+                    pos: self.ship_pos,
+                    dir: angle,
+                    speed: BULLET_SPEED,
+                };
+                self.bullets.push(bullet);
+                self.last_fire = current_time;
+            }
         }
 
         let mut cull_bullets = vec![];
@@ -216,6 +222,7 @@ fn main() {
     // Create a new game and run it.
     let mut app = App {
         jumping: false,
+        last_fire: 0,
         exit_speed: 0.0,
         ship_pos: Point::new(0.0, 0.0),
         height: 75.0,
@@ -238,7 +245,7 @@ fn main() {
     };
 
     let mut cursor: Option<[f64; 2]> = None;
-    let mut shoot_target: Option<Point> = None;
+    let mut shooting: bool = false;
 
     while let Some(e) = window.next() {
         cursor = match e.mouse_cursor_args() {
@@ -258,9 +265,7 @@ fn main() {
                 }
                 Button::Mouse(key) => {
                     match key {
-                        MouseButton::Left => {
-                            shoot_target = cursor.map(|c| Point::new(c[0], c[1]));
-                        }
+                        MouseButton::Left => shooting = true,
                         x => println!("Mouse Key {:?}", x),
                     }
                 }
@@ -278,15 +283,22 @@ fn main() {
                         _ => {}
                     }
                 }
+                Button::Mouse(key) => {
+                    match key {
+                        MouseButton::Left => shooting = false,
+                        _ => {}
+                    }
+                }
                 _ => {}
             }
         }
         if let Some(u) = e.update_args() {
+            let shoot_target = if shooting {
+                cursor.map(|c| Point::new(c[0], c[1]))
+            } else {
+                None
+            };
             app.update(&u, up, down, left, right, shoot_target);
-            if let Some(_) = shoot_target {
-                // Only shoot once per click!
-                shoot_target = None;
-            }
         }
         app.render(&mut window, &e);
     }
