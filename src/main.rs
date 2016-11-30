@@ -1,5 +1,4 @@
 extern crate piston_window;
-extern crate time;
 extern crate ncollide;
 extern crate nalgebra as na;
 
@@ -16,7 +15,7 @@ const AIR_CONTROL_MOD: f64 = 50.0;
 const BULLET_SPEED: f64 = 1000.0;
 const BULLET_SIZE: f64 = 5.0;
 const ACCELERATION: f64 = 5.0;
-const FIRE_INTERVAL: u64 = 100000000; // nanoseconds
+const FIRE_COOLDOWN: f64 = 0.1;
 
 #[derive(Debug, Clone, Copy)]
 struct Point {
@@ -52,10 +51,10 @@ pub struct App {
     height: f64,
     planets: Vec<Planet>,
     attached_planet: usize,
-    closest_planet_coords: (f64, f64), // redundant data, optimization
+    closest_planet_coords: Point, // redundant data, optimization
     // NES-style would be to make this a [(f64, f64); 3], so only three bullets can exist at once
     bullets: Vec<Bullet>,
-    last_fire: u64,
+    fire_cooldown: f64,
 }
 
 impl App {
@@ -74,14 +73,14 @@ impl App {
                 .rot_rad(self.rotation)
                 .trans(-(SHIP_SIZE / 2.0), -(SHIP_SIZE / 2.0));
             rectangle(RED, square, ship_transform, g);
-            for planet in &self.planets {
+            for planet in self.planets.iter() {
                 let circle = ellipse::circle(0.0, 0.0, planet.radius);
                 ellipse(BLUE,
                         circle,
                         c.transform.trans(planet.pos.x, planet.pos.y),
                         g);
             }
-            for bullet in &self.bullets {
+            for bullet in self.bullets.iter() {
                 let circle = ellipse::circle(0.0, 0.0, BULLET_SIZE);
                 ellipse(RED,
                         circle,
@@ -90,8 +89,8 @@ impl App {
             }
             let nearest_beam = [self.ship_pos.x,
                                 self.ship_pos.y,
-                                self.closest_planet_coords.0,
-                                self.closest_planet_coords.1];
+                                self.closest_planet_coords.x,
+                                self.closest_planet_coords.y];
             line(GREEN, 1.0, nearest_beam, c.transform.trans(0.0, 0.0), g);
 
             let attached = &self.planets[self.attached_planet];
@@ -106,14 +105,14 @@ impl App {
               down: bool,
               left: bool,
               right: bool,
-              shoot_target: Option<Point>) {
+              shoot_target: Option<Point>,
+              attach: bool) {
         let attached_planet = &self.planets[self.attached_planet];
         self.ship_pos.x = attached_planet.pos.x + (self.rotation.cos() * self.height);
         self.ship_pos.y = attached_planet.pos.y + (self.rotation.sin() * self.height);
 
         if let Some(target) = shoot_target {
-            let current_time = time::precise_time_ns();
-            if current_time - self.last_fire > FIRE_INTERVAL {
+            if self.fire_cooldown <= 0.0 {
                 let angle = (target.y - self.ship_pos.y).atan2(target.x - self.ship_pos.x);
                 let bullet = Bullet {
                     pos: self.ship_pos,
@@ -121,13 +120,15 @@ impl App {
                     speed: BULLET_SPEED,
                 };
                 self.bullets.push(bullet);
-                self.last_fire = current_time;
+                self.fire_cooldown = FIRE_COOLDOWN;
+            } else {
+                self.fire_cooldown -= args.dt;
             }
         }
 
         let mut cull_bullets = vec![];
         let mut cull_counter = 0;
-        for (idx, bullet) in (&mut self.bullets).iter_mut().enumerate() {
+        for (idx, bullet) in self.bullets.iter_mut().enumerate() {
             bullet.pos.x = bullet.pos.x + (bullet.speed * args.dt * bullet.dir.cos());
             bullet.pos.y = bullet.pos.y + (bullet.speed * args.dt * bullet.dir.sin());
             // kind of a dumb hack to determine when to cull bullets. It'd be better if we had the
@@ -175,7 +176,10 @@ impl App {
         let ship_ball = Ball::new(SHIP_SIZE / 2.0);
         let ship_pos = Isometry2::new(Vector2::new(self.ship_pos.x, self.ship_pos.y), na::zero());
         let mut closest_planet_distance = self.height;
-        for (planet_index, planet) in (&self.planets).iter().enumerate() {
+        let mut closest_planet_idx = self.attached_planet;
+        let mut closest_planet = &self.planets[self.attached_planet];
+
+        for (planet_index, planet) in self.planets.iter().enumerate() {
             let planet_ball = Ball::new(planet.radius);
             let planet_pos = Isometry2::new(Vector2::new(planet.pos.x, planet.pos.y), na::zero());
 
@@ -183,7 +187,9 @@ impl App {
             let distance = query::distance(&ship_pos, &ship_ball, &planet_pos, &planet_ball);
             if distance < closest_planet_distance {
                 closest_planet_distance = distance;
-                self.closest_planet_coords = (planet.pos.x, planet.pos.y);
+                closest_planet_idx = planet_index;
+                closest_planet = planet;
+                self.closest_planet_coords = Point::new(planet.pos.x, planet.pos.y);
             }
             let collided = query::contact(&ship_pos, &ship_ball, &planet_pos, &planet_ball, -1.0);
             if let Some(_) = collided {
@@ -195,6 +201,15 @@ impl App {
                     .atan2(self.ship_pos.x - planet.pos.x);
                 self.exit_speed = 0.0;
             }
+        }
+        if attach && true
+        // self.attached_planet != closest_planet_idx
+        {
+            self.attached_planet = closest_planet_idx;
+            self.exit_speed = 0.0;
+            self.rotation = (self.ship_pos.y - self.closest_planet_coords.y)
+                .atan2(self.ship_pos.x - self.closest_planet_coords.x);
+            self.height = closest_planet_distance + closest_planet.radius + (SHIP_SIZE / 2.0);
         }
 
         if self.rotation > PI {
@@ -222,13 +237,13 @@ fn main() {
     // Create a new game and run it.
     let mut app = App {
         jumping: false,
-        last_fire: 0,
+        fire_cooldown: 0.0,
         exit_speed: 0.0,
         ship_pos: Point::new(0.0, 0.0),
         height: 75.0,
         rotation: 0.0,
         attached_planet: 0,
-        closest_planet_coords: (500.0, 500.0),
+        closest_planet_coords: Point::new(500.0, 500.0),
         bullets: vec![],
         planets: vec![Planet {
                           pos: Point::new(500.0, 500.0),
@@ -246,6 +261,7 @@ fn main() {
 
     let mut cursor: Option<[f64; 2]> = None;
     let mut shooting: bool = false;
+    let mut attach: bool = false;
 
     while let Some(e) = window.next() {
         cursor = match e.mouse_cursor_args() {
@@ -266,6 +282,7 @@ fn main() {
                 Button::Mouse(key) => {
                     match key {
                         MouseButton::Left => shooting = true,
+                        MouseButton::Right => attach = true,
                         x => println!("Mouse Key {:?}", x),
                     }
                 }
@@ -286,6 +303,7 @@ fn main() {
                 Button::Mouse(key) => {
                     match key {
                         MouseButton::Left => shooting = false,
+                        MouseButton::Right => attach = false,
                         _ => {}
                     }
                 }
@@ -298,7 +316,10 @@ fn main() {
             } else {
                 None
             };
-            app.update(&u, up, down, left, right, shoot_target);
+            app.update(&u, up, down, left, right, shoot_target, attach);
+            if attach {
+                attach = false;
+            }
         }
         app.render(&mut window, &e);
     }
