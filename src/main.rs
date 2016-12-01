@@ -55,6 +55,7 @@ pub struct App {
     // NES-style would be to make this a [(f64, f64); 3], so only three bullets can exist at once
     bullets: Vec<Bullet>,
     fire_cooldown: f64,
+    camera_pos: Point,
 }
 
 impl App {
@@ -67,40 +68,35 @@ impl App {
         let square = rectangle::square(0.0, 0.0, SHIP_SIZE);
 
         window.draw_2d(event, |c, g| {
+            let camera = c.transform.trans(-self.camera_pos.x, -self.camera_pos.y);
             clear(BLACK, g);
-            let ship_transform = c.transform
-                .trans(self.ship_pos.x, self.ship_pos.y)
+            let ship_transform = camera.trans(self.ship_pos.x, self.ship_pos.y)
                 .rot_rad(self.rotation)
                 .trans(-(SHIP_SIZE / 2.0), -(SHIP_SIZE / 2.0));
             rectangle(RED, square, ship_transform, g);
             for planet in self.planets.iter() {
                 let circle = ellipse::circle(0.0, 0.0, planet.radius);
-                ellipse(BLUE,
-                        circle,
-                        c.transform.trans(planet.pos.x, planet.pos.y),
-                        g);
+                ellipse(BLUE, circle, camera.trans(planet.pos.x, planet.pos.y), g);
             }
             for bullet in self.bullets.iter() {
                 let circle = ellipse::circle(0.0, 0.0, BULLET_SIZE);
-                ellipse(RED,
-                        circle,
-                        c.transform.trans(bullet.pos.x, bullet.pos.y),
-                        g);
+                ellipse(RED, circle, camera.trans(bullet.pos.x, bullet.pos.y), g);
             }
             let nearest_beam = [self.ship_pos.x,
                                 self.ship_pos.y,
                                 self.closest_planet_coords.x,
                                 self.closest_planet_coords.y];
-            line(GREEN, 1.0, nearest_beam, c.transform.trans(0.0, 0.0), g);
+            line(GREEN, 1.0, nearest_beam, camera.trans(0.0, 0.0), g);
 
             let attached = &self.planets[self.attached_planet];
             let attached_beam = [self.ship_pos.x, self.ship_pos.y, attached.pos.x, attached.pos.y];
-            line(BLUE, 1.0, attached_beam, c.transform.trans(0.0, 0.0), g);
+            line(BLUE, 1.0, attached_beam, camera.trans(0.0, 0.0), g);
         });
     }
 
     fn update(&mut self,
               args: &UpdateArgs,
+              view_size: Size,
               up: bool,
               down: bool,
               left: bool,
@@ -132,7 +128,7 @@ impl App {
             bullet.pos.x = bullet.pos.x + (bullet.speed * args.dt * bullet.dir.cos());
             bullet.pos.y = bullet.pos.y + (bullet.speed * args.dt * bullet.dir.sin());
             // kind of a dumb hack to determine when to cull bullets. It'd be better if we had the
-            // current view's bounding box (+ margin)
+            // current view's bounding box (+ margin). or, alternatively, give each bullet a TTL.
             if (bullet.pos.x - self.ship_pos.x).abs() > 5000.0 ||
                (bullet.pos.y - self.ship_pos.y).abs() > 5000.0 {
                 // rejigger the index so when we delete the items they compensate for previous
@@ -202,9 +198,9 @@ impl App {
                 self.exit_speed = 0.0;
             }
         }
-        if attach && true
-        // self.attached_planet != closest_planet_idx
-        {
+        if attach {
+            // should we disallow attaching to the same planet? it basically allows player to
+            // hard-stop
             self.attached_planet = closest_planet_idx;
             self.exit_speed = 0.0;
             self.rotation = (self.ship_pos.y - self.closest_planet_coords.y)
@@ -218,15 +214,27 @@ impl App {
         if self.rotation < -PI {
             self.rotation += 2.0 * PI
         }
+
+
+        let x_margin = (1.0 / 4.0) * view_size.width as f64;
+        let y_margin = (1.0 / 4.0) * view_size.height as f64;
+        let view_width_with_margin = view_size.width as f64 * (3.0 / 4.0);
+        let view_height_with_margin = view_size.height as f64 * (3.0 / 4.0);
+
+        if self.ship_pos.x > self.camera_pos.x + view_width_with_margin {
+            self.camera_pos.x += self.ship_pos.x - (self.camera_pos.x + view_width_with_margin);
+        } else if self.ship_pos.x < self.camera_pos.x + x_margin {
+            self.camera_pos.x += self.ship_pos.x - self.camera_pos.x - x_margin;
+        }
+        if self.ship_pos.y > self.camera_pos.y + view_height_with_margin {
+            self.camera_pos.y += self.ship_pos.y - (self.camera_pos.y + view_height_with_margin);
+        } else if self.ship_pos.y < self.camera_pos.y + y_margin {
+            self.camera_pos.y += self.ship_pos.y - self.camera_pos.y - y_margin;
+        }
     }
 }
 
 fn main() {
-    let mut left = false;
-    let mut right = false;
-    let mut down = false;
-    let mut up = false;
-
     let mut window: PistonWindow = WindowSettings::new("Circles", [1024, 768])
         .exit_on_esc(true)
         .vsync(true)
@@ -236,6 +244,7 @@ fn main() {
 
     // Create a new game and run it.
     let mut app = App {
+        camera_pos: Point::new(-0.0, -0.0),
         jumping: false,
         fire_cooldown: 0.0,
         exit_speed: 0.0,
@@ -259,6 +268,11 @@ fn main() {
                       }],
     };
 
+    // probably move this into a struct
+    let mut left = false;
+    let mut right = false;
+    let mut down = false;
+    let mut up = false;
     let mut cursor: Option<[f64; 2]> = None;
     let mut shooting: bool = false;
     let mut attach: bool = false;
@@ -312,11 +326,18 @@ fn main() {
         }
         if let Some(u) = e.update_args() {
             let shoot_target = if shooting {
-                cursor.map(|c| Point::new(c[0], c[1]))
+                cursor.map(|c| Point::new(app.camera_pos.x + c[0], app.camera_pos.y + c[1]))
             } else {
                 None
             };
-            app.update(&u, up, down, left, right, shoot_target, attach);
+            app.update(&u,
+                       window.size(),
+                       up,
+                       down,
+                       left,
+                       right,
+                       shoot_target,
+                       attach);
             if attach {
                 attach = false;
             }
