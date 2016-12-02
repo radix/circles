@@ -1,12 +1,14 @@
 extern crate piston_window;
 extern crate ncollide;
 extern crate nalgebra as na;
+extern crate rand;
 
 use std::f64::consts::PI;
 use piston_window::*;
 use ncollide::query;
 use ncollide::shape::Ball;
 use na::{Isometry2, Vector2};
+use rand::distributions::{IndependentSample, Range};
 
 const SHIP_SIZE: f64 = 50.0;
 const SPEED: f64 = 5.0;
@@ -235,10 +237,25 @@ impl App {
 }
 
 fn main() {
+    let range_width = Range::new(0.0, 1024.0);
+    let range_height = Range::new(0.0, 768.0);
+    let range_radius = Range::new(35.0, 100.0);
+    let mut rng = rand::thread_rng();
+    let planets: Vec<Planet> = (0..3)
+        .map(|_| {
+            let x = range_width.ind_sample(&mut rng);
+            let y = range_height.ind_sample(&mut rng);
+            let radius = range_radius.ind_sample(&mut rng);
+            Planet {
+                pos: Point::new(x, y),
+                radius: radius,
+            }
+        })
+        .collect();
     let mut window: PistonWindow = WindowSettings::new("Circles", [1024, 768])
         .exit_on_esc(true)
-        .vsync(true)
-        .samples(8)
+        .vsync(false)
+        // .samples(8)
         .build()
         .unwrap();
 
@@ -249,23 +266,12 @@ fn main() {
         fire_cooldown: 0.0,
         exit_speed: 0.0,
         ship_pos: Point::new(0.0, 0.0),
-        height: 75.0,
+        height: (planets[0]).radius,
         rotation: 0.0,
         attached_planet: 0,
         closest_planet_coords: Point::new(500.0, 500.0),
         bullets: vec![],
-        planets: vec![Planet {
-                          pos: Point::new(500.0, 500.0),
-                          radius: 50.0,
-                      },
-                      Planet {
-                          pos: Point::new(800.0, 200.0),
-                          radius: 35.0,
-                      },
-                      Planet {
-                          pos: Point::new(300.0, 200.0),
-                          radius: 100.0,
-                      }],
+        planets: planets,
     };
 
     // probably move this into a struct
