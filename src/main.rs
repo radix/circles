@@ -46,12 +46,10 @@ impl GameInput {
 #[derive(Debug)]
 pub struct App {
     rotation: f64, // ship rotation (position on the planet)
-    ship_pos: Point, // redundant data, optimization
     jumping: bool,
     exit_speed: f64,
     height: f64,
     space: Space,
-    // planets: HashMap<(i32, i32), Vec<Planet>>, // planets are divided up into areas 1024x768 in size.
     attached_planet: PlanetIndex,
     closest_planet_coords: Point, // redundant data, optimization
     // NES-style would be to make this a [(f64, f64); 3], so only three bullets can exist at once
@@ -70,10 +68,11 @@ impl App {
         let square = rectangle::square(0.0, 0.0, SHIP_SIZE);
 
         window.draw_2d(event, |c, g| {
+            let ship_pos = self.space.get_focus();
             let planets = self.space.get_nearby_planets();
             let camera = c.transform.trans(-self.camera_pos.x, -self.camera_pos.y);
             clear(BLACK, g);
-            let ship_transform = camera.trans(self.ship_pos.x, self.ship_pos.y)
+            let ship_transform = camera.trans(ship_pos.x, ship_pos.y)
                 .rot_rad(self.rotation)
                 .trans(-(SHIP_SIZE / 2.0), -(SHIP_SIZE / 2.0));
             rectangle(RED, square, ship_transform, g);
@@ -86,30 +85,28 @@ impl App {
                 let circle = ellipse::circle(0.0, 0.0, BULLET_SIZE);
                 ellipse(RED, circle, camera.trans(bullet.pos.x, bullet.pos.y), g);
             }
-            let nearest_beam = [self.ship_pos.x,
-                                self.ship_pos.y,
+            let nearest_beam = [ship_pos.x,
+                                ship_pos.y,
                                 self.closest_planet_coords.x,
                                 self.closest_planet_coords.y];
             line(GREEN, 1.0, nearest_beam, camera.trans(0.0, 0.0), g);
 
             let attached = &self.space.get_planet(self.attached_planet);
-            let attached_beam = [self.ship_pos.x, self.ship_pos.y, attached.pos.x, attached.pos.y];
+            let attached_beam = [ship_pos.x, ship_pos.y, attached.pos.x, attached.pos.y];
             line(BLUE, 1.0, attached_beam, camera.trans(0.0, 0.0), g);
         });
     }
 
     fn update(&mut self, args: &UpdateArgs, view_size: Size, input: &GameInput) {
-        // self.space.realize();
-        {
+        let ship_pos = {
             let attached_planet = self.space.get_planet(self.attached_planet);
-            self.ship_pos.x = attached_planet.pos.x + (self.rotation.cos() * self.height);
-            self.ship_pos.y = attached_planet.pos.y + (self.rotation.sin() * self.height);
-
+            let ship_pos = Point::new(attached_planet.pos.x + (self.rotation.cos() * self.height),
+                                      attached_planet.pos.y + (self.rotation.sin() * self.height));
             if let Some(target) = input.shoot_target {
                 if self.fire_cooldown <= 0.0 {
-                    let angle = (target.y - self.ship_pos.y).atan2(target.x - self.ship_pos.x);
+                    let angle = (target.y - ship_pos.y).atan2(target.x - ship_pos.x);
                     let bullet = Bullet {
-                        pos: self.ship_pos,
+                        pos: ship_pos,
                         dir: angle,
                         speed: BULLET_SPEED,
                     };
@@ -127,8 +124,8 @@ impl App {
                 bullet.pos.y = bullet.pos.y + (bullet.speed * args.dt * bullet.dir.sin());
                 // kind of a dumb hack to determine when to cull bullets. It'd be better if we had the
                 // current view's bounding box (+ margin). or, alternatively, give each bullet a TTL.
-                if (bullet.pos.x - self.ship_pos.x).abs() > 5000.0 ||
-                   (bullet.pos.y - self.ship_pos.y).abs() > 5000.0 {
+                if (bullet.pos.x - ship_pos.x).abs() > 5000.0 ||
+                   (bullet.pos.y - ship_pos.y).abs() > 5000.0 {
                     // rejigger the index so when we delete the items they compensate for previous
                     // deletions
                     cull_bullets.push(idx - cull_counter);
@@ -168,8 +165,7 @@ impl App {
             }
 
             let ship_ball = Ball::new(SHIP_SIZE / 2.0);
-            let ship_pos = Isometry2::new(Vector2::new(self.ship_pos.x, self.ship_pos.y),
-                                          na::zero());
+            let na_ship_pos = Isometry2::new(Vector2::new(ship_pos.x, ship_pos.y), na::zero());
             let mut closest_planet_distance = self.height;
             let mut closest_planet_idx: PlanetIndex = self.attached_planet;
             let mut closest_planet = attached_planet;
@@ -180,7 +176,7 @@ impl App {
                                                 na::zero());
 
                 // Check if this is the closest planet
-                let distance = query::distance(&ship_pos, &ship_ball, &planet_pos, &planet_ball);
+                let distance = query::distance(&na_ship_pos, &ship_ball, &planet_pos, &planet_ball);
                 if distance < closest_planet_distance {
                     closest_planet_distance = distance;
                     closest_planet_idx = planet_index;
@@ -188,14 +184,13 @@ impl App {
                     self.closest_planet_coords = Point::new(planet.pos.x, planet.pos.y);
                 }
                 let collided =
-                    query::contact(&ship_pos, &ship_ball, &planet_pos, &planet_ball, -1.0);
+                    query::contact(&na_ship_pos, &ship_ball, &planet_pos, &planet_ball, -1.0);
                 if let Some(_) = collided {
                     // We are landing on a new planet
                     self.attached_planet = planet_index;
                     self.jumping = false;
                     self.height = planet.radius + (SHIP_SIZE / 2.0);
-                    self.rotation = (self.ship_pos.y - planet.pos.y)
-                        .atan2(self.ship_pos.x - planet.pos.x);
+                    self.rotation = (ship_pos.y - planet.pos.y).atan2(ship_pos.x - planet.pos.x);
                     self.exit_speed = 0.0;
                 }
             }
@@ -204,8 +199,8 @@ impl App {
                 // hard-stop
                 self.attached_planet = closest_planet_idx;
                 self.exit_speed = 0.0;
-                self.rotation = (self.ship_pos.y - self.closest_planet_coords.y)
-                    .atan2(self.ship_pos.x - self.closest_planet_coords.x);
+                self.rotation = (ship_pos.y - self.closest_planet_coords.y)
+                    .atan2(ship_pos.x - self.closest_planet_coords.x);
                 self.height = closest_planet_distance + closest_planet.radius + (SHIP_SIZE / 2.0);
             }
 
@@ -222,19 +217,19 @@ impl App {
             let view_width_with_margin = view_size.width as f64 * (3.0 / 4.0);
             let view_height_with_margin = view_size.height as f64 * (3.0 / 4.0);
 
-            if self.ship_pos.x > self.camera_pos.x + view_width_with_margin {
-                self.camera_pos.x += self.ship_pos.x - (self.camera_pos.x + view_width_with_margin);
-            } else if self.ship_pos.x < self.camera_pos.x + x_margin {
-                self.camera_pos.x += self.ship_pos.x - self.camera_pos.x - x_margin;
+            if ship_pos.x > self.camera_pos.x + view_width_with_margin {
+                self.camera_pos.x += ship_pos.x - (self.camera_pos.x + view_width_with_margin);
+            } else if ship_pos.x < self.camera_pos.x + x_margin {
+                self.camera_pos.x += ship_pos.x - self.camera_pos.x - x_margin;
             }
-            if self.ship_pos.y > self.camera_pos.y + view_height_with_margin {
-                self.camera_pos.y += self.ship_pos.y -
-                                     (self.camera_pos.y + view_height_with_margin);
-            } else if self.ship_pos.y < self.camera_pos.y + y_margin {
-                self.camera_pos.y += self.ship_pos.y - self.camera_pos.y - y_margin;
+            if ship_pos.y > self.camera_pos.y + view_height_with_margin {
+                self.camera_pos.y += ship_pos.y - (self.camera_pos.y + view_height_with_margin);
+            } else if ship_pos.y < self.camera_pos.y + y_margin {
+                self.camera_pos.y += ship_pos.y - self.camera_pos.y - y_margin;
             }
-        }
-        self.space.focus(self.ship_pos);
+            ship_pos
+        };
+        self.space.focus(ship_pos);
     }
 }
 
@@ -254,7 +249,6 @@ fn main() {
         jumping: false,
         fire_cooldown: 0.0,
         exit_speed: 0.0,
-        ship_pos: Point::new(0.0, 0.0),
         height: space.get_planet(attached_planet_idx).radius,
         rotation: 0.0,
         attached_planet: attached_planet_idx,
