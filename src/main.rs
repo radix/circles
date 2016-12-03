@@ -21,6 +21,28 @@ const BULLET_SIZE: f64 = 5.0;
 const ACCELERATION: f64 = 5.0;
 const FIRE_COOLDOWN: f64 = 0.1;
 
+struct GameInput {
+    left: bool,
+    right: bool,
+    down: bool,
+    up: bool,
+    shoot_target: Option<Point>,
+    attach: bool,
+}
+
+impl GameInput {
+    fn new() -> GameInput {
+        GameInput {
+            left: false,
+            right: false,
+            down: false,
+            up: false,
+            shoot_target: None,
+            attach: false,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct App {
     rotation: f64, // ship rotation (position on the planet)
@@ -76,22 +98,14 @@ impl App {
         });
     }
 
-    fn update(&mut self,
-              args: &UpdateArgs,
-              view_size: Size,
-              up: bool,
-              down: bool,
-              left: bool,
-              right: bool,
-              shoot_target: Option<Point>,
-              attach: bool) {
+    fn update(&mut self, args: &UpdateArgs, view_size: Size, input: &GameInput) {
         // self.space.realize();
         {
             let attached_planet = self.space.get_planet(self.attached_planet);
             self.ship_pos.x = attached_planet.pos.x + (self.rotation.cos() * self.height);
             self.ship_pos.y = attached_planet.pos.y + (self.rotation.sin() * self.height);
 
-            if let Some(target) = shoot_target {
+            if let Some(target) = input.shoot_target {
                 if self.fire_cooldown <= 0.0 {
                     let angle = (target.y - self.ship_pos.y).atan2(target.x - self.ship_pos.x);
                     let bullet = Bullet {
@@ -127,28 +141,28 @@ impl App {
             }
 
             if !self.jumping {
-                if left {
+                if input.left {
                     self.rotation -= SPEED * args.dt;
                 }
-                if right {
+                if input.right {
                     self.rotation += SPEED * args.dt;
                 }
-                if up {
+                if input.up {
                     self.jumping = true;
                     self.exit_speed = JUMP_SPEED;
                 }
             } else {
                 self.height += self.exit_speed;
-                if left {
+                if input.left {
                     self.rotation -= SPEED * (AIR_CONTROL_MOD / self.height) * args.dt
                 }
-                if right {
+                if input.right {
                     self.rotation += SPEED * (AIR_CONTROL_MOD / self.height) * args.dt
                 }
-                if down {
+                if input.down {
                     self.exit_speed -= ACCELERATION * args.dt;
                 }
-                if up {
+                if input.up {
                     self.exit_speed += ACCELERATION * args.dt;
                 }
             }
@@ -185,7 +199,7 @@ impl App {
                     self.exit_speed = 0.0;
                 }
             }
-            if attach {
+            if input.attach {
                 // should we disallow attaching to the same planet? it basically allows player to
                 // hard-stop
                 self.attached_planet = closest_planet_idx;
@@ -248,15 +262,9 @@ fn main() {
         bullets: vec![],
         space: Space::new(),
     };
-    // probably move this into a struct
-    let mut left = false;
-    let mut right = false;
-    let mut down = false;
-    let mut up = false;
+    let mut input = GameInput::new();
     let mut cursor: Option<[f64; 2]> = None;
-    let mut shooting: bool = false;
-    let mut attach: bool = false;
-
+    let mut shooting = false;
     while let Some(e) = window.next() {
         cursor = match e.mouse_cursor_args() {
             None => cursor,
@@ -266,17 +274,17 @@ fn main() {
             match press {
                 Button::Keyboard(key) => {
                     match key {
-                        Key::Left | Key::A => left = true,
-                        Key::Right | Key::E | Key::D => right = true,
-                        Key::Up | Key::Comma | Key::W => up = true,
-                        Key::Down | Key::O | Key::S => down = true,
+                        Key::Left | Key::A => input.left = true,
+                        Key::Right | Key::E | Key::D => input.right = true,
+                        Key::Up | Key::Comma | Key::W => input.up = true,
+                        Key::Down | Key::O | Key::S => input.down = true,
                         x => println!("Keyboard Key {:?}", x),
                     }
                 }
                 Button::Mouse(key) => {
                     match key {
                         MouseButton::Left => shooting = true,
-                        MouseButton::Right => attach = true,
+                        MouseButton::Right => input.attach = true,
                         x => println!("Mouse Key {:?}", x),
                     }
                 }
@@ -287,17 +295,17 @@ fn main() {
             match press {
                 Button::Keyboard(key) => {
                     match key {
-                        Key::Left | Key::A => left = false,
-                        Key::Right | Key::E | Key::D => right = false,
-                        Key::Up | Key::Comma | Key::W => up = false,
-                        Key::Down | Key::O | Key::S => down = false,
+                        Key::Left | Key::A => input.left = false,
+                        Key::Right | Key::E | Key::D => input.right = false,
+                        Key::Up | Key::Comma | Key::W => input.up = false,
+                        Key::Down | Key::O | Key::S => input.down = false,
                         _ => {}
                     }
                 }
                 Button::Mouse(key) => {
                     match key {
                         MouseButton::Left => shooting = false,
-                        MouseButton::Right => attach = false,
+                        MouseButton::Right => input.attach = false,
                         _ => {}
                     }
                 }
@@ -305,21 +313,14 @@ fn main() {
             }
         }
         if let Some(u) = e.update_args() {
-            let shoot_target = if shooting {
+            input.shoot_target = if shooting {
                 cursor.map(|c| Point::new(app.camera_pos.x + c[0], app.camera_pos.y + c[1]))
             } else {
                 None
             };
-            app.update(&u,
-                       window.size(),
-                       up,
-                       down,
-                       left,
-                       right,
-                       shoot_target,
-                       attach);
-            if attach {
-                attach = false;
+            app.update(&u, window.size(), &input);
+            if input.attach {
+                input.attach = false;
             }
         }
         app.render(&mut window, &e);
