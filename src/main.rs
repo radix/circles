@@ -1,15 +1,16 @@
 extern crate piston_window;
 extern crate ncollide;
 extern crate nalgebra as na;
-extern crate rand;
 
 use std::f64::consts::PI;
-use std::collections::HashMap;
 use piston_window::*;
 use ncollide::query;
 use ncollide::shape::Ball;
 use na::{Isometry2, Vector2};
-use rand::distributions::{IndependentSample, Range};
+
+mod space;
+
+use space::*;
 
 const SHIP_SIZE: f64 = 50.0;
 const SPEED: f64 = 5.0;
@@ -19,31 +20,6 @@ const BULLET_SPEED: f64 = 1000.0;
 const BULLET_SIZE: f64 = 5.0;
 const ACCELERATION: f64 = 5.0;
 const FIRE_COOLDOWN: f64 = 0.1;
-
-#[derive(Debug, Clone, Copy)]
-struct Point {
-    x: f64,
-    y: f64,
-}
-
-impl Point {
-    fn new(x: f64, y: f64) -> Point {
-        Point { x: x, y: y }
-    }
-}
-
-#[derive(Debug)]
-struct Planet {
-    pos: Point,
-    radius: f64,
-}
-
-#[derive(Debug)]
-pub struct Bullet {
-    pos: Point,
-    dir: f64, // radians
-    speed: f64,
-}
 
 #[derive(Debug)]
 pub struct App {
@@ -60,110 +36,6 @@ pub struct App {
     bullets: Vec<Bullet>,
     fire_cooldown: f64,
     camera_pos: Point,
-}
-
-#[derive(Clone, Copy, Debug)]
-pub struct PlanetIndex {
-    area: (i32, i32),
-    idx: usize,
-}
-
-#[derive(Debug)]
-pub struct Space {
-    planets: HashMap<(i32, i32), Vec<Planet>>,
-    current_point: Point,
-}
-
-impl Space {
-    fn new() -> Space {
-        let mut sp = Space {
-            planets: HashMap::new(),
-            current_point: Point::new(0.0, 0.0),
-        };
-        sp.realize();
-        sp
-    }
-
-    fn focus(&mut self, p: Point) {
-        self.current_point = p;
-        self.realize();
-    }
-
-    /// Return all nearby planets, but without generating any. This means that if you call this
-    /// with a point that hasn't been realize()d yet, it may panic.
-    fn get_nearby_planets(&self) -> Vec<(PlanetIndex, &Planet)> {
-        let mut planets = vec![];
-        for area in self.get_nearby_areas() {
-            if let Some(ps) = self.planets.get(&area) {
-                for (i, p) in ps.iter().enumerate() {
-                    planets.push((PlanetIndex {
-                                      area: area,
-                                      idx: i,
-                                  },
-                                  p));
-                }
-            } else {
-                panic!("Uninitialized area {:?} when in area {:?}",
-                       area,
-                       Space::get_area(self.current_point));
-            }
-        }
-        planets
-    }
-
-    fn get_planet_unsafe(&self, idx: PlanetIndex) -> &Planet {
-        &self.planets[&idx.area][idx.idx]
-    }
-
-    fn get_nearby_areas(&self) -> Vec<(i32, i32)> {
-        let area = Space::get_area(self.current_point);
-        let (x, y) = (area.0, area.1);
-        vec![(x - 1, y - 1),
-             (x - 1, y + 0),
-             (x - 1, y + 1),
-             (x + 0, y - 1),
-             (x + 0, y + 0),
-             (x + 0, y + 1),
-             (x + 1, y - 1),
-             (x + 1, y + 0),
-             (x + 1, y + 1)]
-    }
-
-    fn get_area(p: Point) -> (i32, i32) {
-        (p.x.floor() as i32 / 1024, p.y.floor() as i32 / 768)
-    }
-
-    /// Generate planets around the current center point
-    fn realize(&mut self) {
-        for area in self.get_nearby_areas() {
-            self.planets.entry(area).or_insert_with(|| Space::gen_planets(area));
-        }
-    }
-
-    /// Generate some planets for a given area. Each planet will have an appropriate x/y offset based
-    /// on the area given.
-    fn gen_planets(area: (i32, i32)) -> Vec<Planet> {
-        println!("Generating planets for {:?}", area);
-        let x_offset = 1024.0 * (area.0 as f64);
-        let y_offset = 768.0 * (area.1 as f64);
-        let range_width = Range::new(x_offset + 0.0, x_offset + 1024.0);
-        let range_height = Range::new(y_offset + 0.0, y_offset + 768.0);
-        let range_radius = Range::new(35.0, 100.0);
-        let mut rng = rand::thread_rng();
-        let range_num_planets = Range::new(1, 5);
-        let num_planets = range_num_planets.ind_sample(&mut rng);
-        (0..num_planets)
-            .map(|_| {
-                let x = range_width.ind_sample(&mut rng);
-                let y = range_height.ind_sample(&mut rng);
-                let radius = range_radius.ind_sample(&mut rng);
-                Planet {
-                    pos: Point::new(x, y),
-                    radius: radius,
-                }
-            })
-            .collect()
-    }
 }
 
 impl App {
@@ -198,7 +70,7 @@ impl App {
                                 self.closest_planet_coords.y];
             line(GREEN, 1.0, nearest_beam, camera.trans(0.0, 0.0), g);
 
-            let attached = &self.space.get_planet_unsafe(self.attached_planet);
+            let attached = &self.space.get_planet(self.attached_planet);
             let attached_beam = [self.ship_pos.x, self.ship_pos.y, attached.pos.x, attached.pos.y];
             line(BLUE, 1.0, attached_beam, camera.trans(0.0, 0.0), g);
         });
@@ -213,9 +85,9 @@ impl App {
               right: bool,
               shoot_target: Option<Point>,
               attach: bool) {
-        self.space.realize();
+        // self.space.realize();
         {
-            let attached_planet = self.space.get_planet_unsafe(self.attached_planet);
+            let attached_planet = self.space.get_planet(self.attached_planet);
             self.ship_pos.x = attached_planet.pos.x + (self.rotation.cos() * self.height);
             self.ship_pos.y = attached_planet.pos.y + (self.rotation.sin() * self.height);
 
@@ -361,23 +233,21 @@ fn main() {
         .unwrap();
 
     // Create a new game and run it.
+    let space = Space::new();
+    let attached_planet_idx = space.get_nearby_planets()[0].0;
     let mut app = App {
         camera_pos: Point::new(-0.0, -0.0),
         jumping: false,
         fire_cooldown: 0.0,
         exit_speed: 0.0,
         ship_pos: Point::new(0.0, 0.0),
-        height: 0.0,
+        height: space.get_planet(attached_planet_idx).radius,
         rotation: 0.0,
-        attached_planet: PlanetIndex {
-            area: (0, 0),
-            idx: 0,
-        },
+        attached_planet: attached_planet_idx,
         closest_planet_coords: Point::new(500.0, 500.0),
         bullets: vec![],
         space: Space::new(),
     };
-    app.height = app.space.get_planet_unsafe(app.attached_planet).radius;
     // probably move this into a struct
     let mut left = false;
     let mut right = false;
