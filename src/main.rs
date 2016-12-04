@@ -58,6 +58,17 @@ pub struct App {
     camera_pos: Point,
 }
 
+/// Check if a circle is in the current viewport.
+fn circle_in_view(point: Point,
+                  radius: f64,
+                  camera: Point,
+                  view_size: piston_window::Size)
+                  -> bool {
+    point.x + radius > camera.x && point.x - radius < camera.x + view_size.width as f64 ||
+    point.y + radius > camera.y && point.y - radius < camera.y + view_size.height as f64
+}
+
+
 impl App {
     fn render(&self, mut window: &mut PistonWindow, event: &Event) {
         const GREEN: [f32; 4] = [0.0, 1.0, 0.0, 1.0];
@@ -79,16 +90,16 @@ impl App {
             rectangle(RED, square, ship_transform, g);
 
             for (_, planet) in planets {
-                if planet.pos.x + planet.radius < self.camera_pos.x ||
-                   planet.pos.x - planet.radius > self.camera_pos.x + view_size.width as f64 ||
-                   planet.pos.y + planet.radius < self.camera_pos.y ||
-                   planet.pos.y - planet.radius > self.camera_pos.y + view_size.height as f64 {
+                if !circle_in_view(planet.pos, planet.radius, self.camera_pos, view_size) {
                     continue;
                 }
                 let circle = ellipse::circle(0.0, 0.0, planet.radius);
                 ellipse(BLUE, circle, camera.trans(planet.pos.x, planet.pos.y), g);
             }
             for bullet in self.bullets.iter() {
+                if !circle_in_view(bullet.pos, BULLET_SIZE, self.camera_pos, view_size) {
+                    continue;
+                }
                 let circle = ellipse::circle(0.0, 0.0, BULLET_SIZE);
                 ellipse(RED, circle, camera.trans(bullet.pos.x, bullet.pos.y), g);
             }
