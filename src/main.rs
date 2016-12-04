@@ -45,7 +45,7 @@ impl GameInput {
 
 #[derive(Debug)]
 pub struct App {
-    rotation: f64, // ship rotation (position on the planet)
+    rotation: f64, // ship rotation / position along the orbit
     jumping: bool,
     exit_speed: f64,
     height: f64,
@@ -100,8 +100,8 @@ impl App {
     fn update(&mut self, args: &UpdateArgs, view_size: Size, input: &GameInput) {
         let ship_pos = {
             let attached_planet = self.space.get_planet(self.attached_planet);
-            let ship_pos = Point::new(attached_planet.pos.x + (self.rotation.cos() * self.height),
-                                      attached_planet.pos.y + (self.rotation.sin() * self.height));
+            let ship_pos = pt(attached_planet.pos.x + (self.rotation.cos() * self.height),
+                              attached_planet.pos.y + (self.rotation.sin() * self.height));
             if let Some(target) = input.shoot_target {
                 if self.fire_cooldown <= 0.0 {
                     let angle = (target.y - ship_pos.y).atan2(target.x - ship_pos.x);
@@ -181,7 +181,7 @@ impl App {
                     closest_planet_distance = distance;
                     closest_planet_idx = planet_index;
                     closest_planet = planet;
-                    self.closest_planet_coords = Point::new(planet.pos.x, planet.pos.y);
+                    self.closest_planet_coords = pt(planet.pos.x, planet.pos.y);
                 }
                 let collided =
                     query::contact(&na_ship_pos, &ship_ball, &planet_pos, &planet_ball, -1.0);
@@ -192,6 +192,7 @@ impl App {
                     self.height = planet.radius + (SHIP_SIZE / 2.0);
                     self.rotation = (ship_pos.y - planet.pos.y).atan2(ship_pos.x - planet.pos.x);
                     self.exit_speed = 0.0;
+                    println!("Attached to planet: {:?} {:?}", planet_index, planet);
                 }
             }
             if input.attach {
@@ -245,14 +246,14 @@ fn main() {
     let space = Space::new();
     let attached_planet_idx = space.get_nearby_planets()[0].0;
     let mut app = App {
-        camera_pos: Point::new(-0.0, -0.0),
+        camera_pos: pt(-0.0, -0.0),
         jumping: false,
         fire_cooldown: 0.0,
         exit_speed: 0.0,
         height: space.get_planet(attached_planet_idx).radius,
         rotation: 0.0,
         attached_planet: attached_planet_idx,
-        closest_planet_coords: Point::new(500.0, 500.0),
+        closest_planet_coords: pt(500.0, 500.0),
         bullets: vec![],
         space: Space::new(),
     };
@@ -308,7 +309,7 @@ fn main() {
         }
         if let Some(u) = e.update_args() {
             input.shoot_target = if shooting {
-                cursor.map(|c| Point::new(app.camera_pos.x + c[0], app.camera_pos.y + c[1]))
+                cursor.map(|c| pt(app.camera_pos.x + c[0], app.camera_pos.y + c[1]))
             } else {
                 None
             };

@@ -4,6 +4,9 @@ use std::collections::HashMap;
 
 use self::rand::distributions::{IndependentSample, Range};
 
+const AREA_WIDTH: f64 = 2560.0;
+const AREA_HEIGHT: f64 = 2560.0;
+
 
 #[derive(Debug, Clone, Copy)]
 pub struct Point {
@@ -15,6 +18,10 @@ impl Point {
     pub fn new(x: f64, y: f64) -> Point {
         Point { x: x, y: y }
     }
+}
+
+pub fn pt(x: f64, y: f64) -> Point {
+    Point::new(x, y)
 }
 
 #[derive(Debug)]
@@ -32,11 +39,28 @@ pub struct Bullet {
 
 #[derive(Clone, Copy, Debug)]
 pub struct PlanetIndex {
-    // Keep this private!
+    // Keep this private, so users can't construct PlanetIndexes. This marginally improves safety,
+    // since Space::get_planet is unsafe if passed PlanetIndexes that weren't returned from
+    // Space::get_nearby_planets. However, it's only marginal since the user could have multiple
+    // Space instances, and cause panics by passing one space's PlanetIndex objects to a different
+    // space. Need dependent types.
     area: (i32, i32),
     idx: usize,
 }
 
+// impl PlanetIndex {
+//     pub fn get_area(&self) -> (i32, i32) {
+//         self.area
+//     }
+//     pub fn get_index(&self) -> usize {
+//         self.idx
+//     }
+// }
+
+
+/// Space is responsible for holding all the planets in the universe, generating planets when the
+/// ship moves through space, and also giving a view of nearby planets. It is responsible for
+/// holding the position of the ship (`current_point`) to give a safe way to see nearby planets.
 #[derive(Debug)]
 pub struct Space {
     // Keep this private!
@@ -48,19 +72,46 @@ impl Space {
     pub fn new() -> Space {
         let mut sp = Space {
             planets: HashMap::new(),
-            current_point: Point::new(0.0, 0.0),
+            current_point: pt(0.0, 0.0),
         };
         sp.realize();
         sp
     }
 
-    pub fn focus(&mut self, p: Point) {
-        self.current_point = p;
-        self.realize();
+    fn new_with_generator<F>(generate: F) -> Space
+        where F: Fn((i32, i32)) -> Vec<Planet>
+    {
+        let mut sp = Space {
+            planets: HashMap::new(),
+            current_point: pt(0.0, 0.0),
+        };
+        sp.realize_with_generator(generate);
+        sp
     }
 
-    /// Return all nearby planets, but without generating any. This means that if you call this
-    /// with a point that hasn't been realize()d yet, it may panic.
+    pub fn focus(&mut self, p: Point) {
+        let old_area = self.get_central_area();
+        self.current_point = p;
+        self.realize();
+        if self.get_central_area() != old_area {
+            println!("Moving area: {:?} ship is at {:?}",
+                     self.get_central_area(),
+                     p);
+        }
+    }
+
+    fn focus_with_generator<F>(&mut self, p: Point, generate: F)
+        where F: Fn((i32, i32)) -> Vec<Planet>
+    {
+        self.current_point = p;
+        self.realize_with_generator(generate);
+    }
+
+    pub fn get_focus(&self) -> Point {
+        return self.current_point;
+    }
+
+    /// Return all nearby planets.
     pub fn get_nearby_planets(&self) -> Vec<(PlanetIndex, &Planet)> {
         let mut planets = vec![];
         for area in self.get_nearby_areas() {
@@ -75,19 +126,20 @@ impl Space {
             } else {
                 panic!("Uninitialized area {:?} when in area {:?}",
                        area,
-                       Space::get_area(self.current_point));
+                       self.get_central_area());
             }
         }
         planets
     }
 
-    /// This is safe only when using a PlanetIndex returned from *this instance's* get_nearby_planets function
+    /// This is safe only when using a PlanetIndex returned from *this instance's*
+    /// get_nearby_planets method
     pub fn get_planet(&self, idx: PlanetIndex) -> &Planet {
         &self.planets[&idx.area][idx.idx]
     }
 
     fn get_nearby_areas(&self) -> Vec<(i32, i32)> {
-        let area = Space::get_area(self.current_point);
+        let area = self.get_central_area();
         let (x, y) = (area.0, area.1);
         vec![(x - 1, y - 1),
              (x - 1, y + 0),
@@ -101,27 +153,47 @@ impl Space {
     }
 
     fn get_area(p: Point) -> (i32, i32) {
-        (p.x.floor() as i32 / 1024, p.y.floor() as i32 / 768)
+        let x = p.x / AREA_WIDTH;
+        let y = p.y / AREA_HEIGHT;
+        (x.floor() as i32, y.floor() as i32)
+    }
+
+    pub fn get_central_area(&self) -> (i32, i32) {
+        Space::get_area(self.current_point)
     }
 
     /// Generate planets around the current center point
     fn realize(&mut self) {
         for area in self.get_nearby_areas() {
-            self.planets.entry(area).or_insert_with(|| Space::gen_planets(area));
+            self.planets.entry(area).or_insert_with(|| {
+                let mut planets = Space::gen_planets();
+                println!("Area: {:?}", area);
+                for planet in planets.iter_mut() {
+                    println!("Planet: {:?}", planet);
+                    planet.pos.x += area.0 as f64 * AREA_WIDTH;
+                    planet.pos.y += area.1 as f64 * AREA_HEIGHT;
+                    println!("Post-processed: {:?}", planet);
+                }
+                planets
+            });
         }
     }
 
-    /// Generate some planets for a given area. Each planet will have an appropriate x/y offset based
-    /// on the area given.
-    fn gen_planets(area: (i32, i32)) -> Vec<Planet> {
-        println!("Generating planets for {:?}", area);
-        let x_offset = 1024.0 * (area.0 as f64);
-        let y_offset = 768.0 * (area.1 as f64);
-        let range_width = Range::new(x_offset + 0.0, x_offset + 1024.0);
-        let range_height = Range::new(y_offset + 0.0, y_offset + 768.0);
+    fn realize_with_generator<F>(&mut self, generate: F)
+        where F: Fn((i32, i32)) -> Vec<Planet>
+    {
+        for area in self.get_nearby_areas() {
+            self.planets.entry(area).or_insert_with(|| generate(area));
+        }
+    }
+
+    /// Generate some planets in an area
+    fn gen_planets() -> Vec<Planet> {
+        let range_width = Range::new(0.0, AREA_WIDTH);
+        let range_height = Range::new(0.0, AREA_HEIGHT);
         let range_radius = Range::new(35.0, 100.0);
         let mut rng = rand::thread_rng();
-        let range_num_planets = Range::new(1, 5);
+        let range_num_planets = Range::new(8, 16);
         let num_planets = range_num_planets.ind_sample(&mut rng);
         (0..num_planets)
             .map(|_| {
@@ -129,10 +201,38 @@ impl Space {
                 let y = range_height.ind_sample(&mut rng);
                 let radius = range_radius.ind_sample(&mut rng);
                 Planet {
-                    pos: Point::new(x, y),
+                    pos: pt(x, y),
                     radius: radius,
                 }
             })
             .collect()
     }
+}
+
+
+#[test]
+fn x() {
+
+    fn generate(area: (i32, i32)) -> Vec<Planet> {
+        let x_offset = 1024.0 * (area.0 as f64);
+        let y_offset = 768.0 * (area.1 as f64);
+        vec![Planet {
+                 pos: pt(x_offset + 512.0, y_offset + 384.0),
+                 radius: 1.0,
+             }]
+    }
+
+    // +(-1, -1)+(0, -1)-+(1,-1)--|
+    // |   x    |    x    |   x   |
+    // +(-1,0)--+(0,0)---+(1,0)---|
+    // |   x    |    x    |   x   |
+    // +(-1,1)--+(0,1)---+(1,1)---+
+    // |   x    |    x    |   x   |
+    // +--------------------------+
+    //
+
+    let space = Space::new_with_generator(generate);
+    let planets = space.get_nearby_planets();
+    println!("Planets: {:?}", planets);
+    assert!(false);
 }
