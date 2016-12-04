@@ -66,10 +66,11 @@ impl App {
         const BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
 
         let square = rectangle::square(0.0, 0.0, SHIP_SIZE);
+        let view_size = window.size();
+        let ship_pos = self.space.get_focus();
+        let planets = self.space.get_nearby_planets();
 
         window.draw_2d(event, |c, g| {
-            let ship_pos = self.space.get_focus();
-            let planets = self.space.get_nearby_planets();
             let camera = c.transform.trans(-self.camera_pos.x, -self.camera_pos.y);
             clear(BLACK, g);
             let ship_transform = camera.trans(ship_pos.x, ship_pos.y)
@@ -78,6 +79,12 @@ impl App {
             rectangle(RED, square, ship_transform, g);
 
             for (_, planet) in planets {
+                if planet.pos.x + planet.radius < self.camera_pos.x ||
+                   planet.pos.x - planet.radius > self.camera_pos.x + view_size.width as f64 ||
+                   planet.pos.y + planet.radius < self.camera_pos.y ||
+                   planet.pos.y - planet.radius > self.camera_pos.y + view_size.height as f64 {
+                    continue;
+                }
                 let circle = ellipse::circle(0.0, 0.0, planet.radius);
                 ellipse(BLUE, circle, camera.trans(planet.pos.x, planet.pos.y), g);
             }
