@@ -78,17 +78,6 @@ impl Space {
         sp
     }
 
-    fn new_with_generator<F>(generate: F) -> Space
-        where F: Fn((i32, i32)) -> Vec<Planet>
-    {
-        let mut sp = Space {
-            planets: HashMap::new(),
-            current_point: pt(0.0, 0.0),
-        };
-        sp.realize_with_generator(generate);
-        sp
-    }
-
     pub fn focus(&mut self, p: Point) {
         let old_area = self.get_central_area();
         self.current_point = p;
@@ -98,13 +87,6 @@ impl Space {
                      self.get_central_area(),
                      p);
         }
-    }
-
-    fn focus_with_generator<F>(&mut self, p: Point, generate: F)
-        where F: Fn((i32, i32)) -> Vec<Planet>
-    {
-        self.current_point = p;
-        self.realize_with_generator(generate);
     }
 
     pub fn get_focus(&self) -> Point {
@@ -132,8 +114,8 @@ impl Space {
         planets
     }
 
-    /// This is safe only when using a PlanetIndex returned from *this instance's*
-    /// get_nearby_planets method
+    /// Look up a specific planet. This is safe only when using a PlanetIndex returned from *this
+    /// instance's* get_nearby_planets method
     pub fn get_planet(&self, idx: PlanetIndex) -> &Planet {
         &self.planets[&idx.area][idx.idx]
     }
@@ -179,14 +161,6 @@ impl Space {
         }
     }
 
-    fn realize_with_generator<F>(&mut self, generate: F)
-        where F: Fn((i32, i32)) -> Vec<Planet>
-    {
-        for area in self.get_nearby_areas() {
-            self.planets.entry(area).or_insert_with(|| generate(area));
-        }
-    }
-
     /// Generate some planets in an area
     fn gen_planets() -> Vec<Planet> {
         let range_width = Range::new(0.0, AREA_WIDTH);
@@ -207,32 +181,4 @@ impl Space {
             })
             .collect()
     }
-}
-
-
-#[test]
-fn x() {
-
-    fn generate(area: (i32, i32)) -> Vec<Planet> {
-        let x_offset = 1024.0 * (area.0 as f64);
-        let y_offset = 768.0 * (area.1 as f64);
-        vec![Planet {
-                 pos: pt(x_offset + 512.0, y_offset + 384.0),
-                 radius: 1.0,
-             }]
-    }
-
-    // +(-1, -1)+(0, -1)-+(1,-1)--|
-    // |   x    |    x    |   x   |
-    // +(-1,0)--+(0,0)---+(1,0)---|
-    // |   x    |    x    |   x   |
-    // +(-1,1)--+(0,1)---+(1,1)---+
-    // |   x    |    x    |   x   |
-    // +--------------------------+
-    //
-
-    let space = Space::new_with_generator(generate);
-    let planets = space.get_nearby_planets();
-    println!("Planets: {:?}", planets);
-    assert!(false);
 }

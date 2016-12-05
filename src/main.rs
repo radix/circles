@@ -1,6 +1,7 @@
 extern crate piston_window;
 extern crate ncollide;
 extern crate nalgebra as na;
+extern crate find_folder;
 
 use std::f64::consts::PI;
 use piston_window::*;
@@ -22,6 +23,7 @@ const ACCELERATION: f64 = 5.0;
 const FIRE_COOLDOWN: f64 = 0.1;
 
 struct GameInput {
+    toggle_debug: bool,
     left: bool,
     right: bool,
     down: bool,
@@ -33,6 +35,7 @@ struct GameInput {
 impl GameInput {
     fn new() -> GameInput {
         GameInput {
+            toggle_debug: false,
             left: false,
             right: false,
             down: false,
@@ -45,6 +48,7 @@ impl GameInput {
 
 #[derive(Debug)]
 pub struct App {
+    debug: bool,
     rotation: f64, // ship rotation / position along the orbit
     jumping: bool,
     exit_speed: f64,
@@ -56,6 +60,7 @@ pub struct App {
     bullets: Vec<Bullet>,
     fire_cooldown: f64,
     camera_pos: Point,
+    magic_planet: Point,
 }
 
 /// Check if a circle is in the current viewport.
@@ -68,18 +73,35 @@ fn circle_in_view(point: Point,
     point.y + radius > camera.y && point.y - radius < camera.y + view_size.height as f64
 }
 
-
 impl App {
-    fn render(&self, mut window: &mut PistonWindow, event: &Event) {
+    fn debug_point(&self,
+                   g: &mut G2d,
+                   context: &piston_window::Context,
+                   glyphs: &mut Glyphs,
+                   color: [f32; 4],
+                   transform: [[f64; 3]; 2],
+                   point: Point) {
+        if self.debug {
+            // Draw the x/y coords of the ship
+            text::Text::new_color(color, 20).draw(&format!("{:.0}/{:.0}", point.x, point.y),
+                                                  glyphs,
+                                                  &context.draw_state,
+                                                  transform,
+                                                  g);
+        }
+    }
+    fn render(&self, mut window: &mut PistonWindow, event: &Event, glyphs: &mut Glyphs) {
         const GREEN: [f32; 4] = [0.0, 1.0, 0.0, 1.0];
         const RED: [f32; 4] = [1.0, 0.0, 0.0, 1.0];
         const BLUE: [f32; 4] = [0.0, 0.0, 1.0, 1.0];
         const BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
+        const WHITE: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
 
         let square = rectangle::square(0.0, 0.0, SHIP_SIZE);
         let view_size = window.size();
         let ship_pos = self.space.get_focus();
         let planets = self.space.get_nearby_planets();
+        let bullet_gfx = ellipse::circle(0.0, 0.0, BULLET_SIZE);
 
         window.draw_2d(event, |c, g| {
             let camera = c.transform.trans(-self.camera_pos.x, -self.camera_pos.y);
@@ -88,34 +110,44 @@ impl App {
                 .rot_rad(self.rotation)
                 .trans(-(SHIP_SIZE / 2.0), -(SHIP_SIZE / 2.0));
             rectangle(RED, square, ship_transform, g);
+            self.debug_point(g, &c, glyphs, WHITE, ship_transform, ship_pos);
 
             for (_, planet) in planets {
-                if !circle_in_view(planet.pos, planet.radius, self.camera_pos, view_size) {
-                    continue;
+                if circle_in_view(planet.pos, planet.radius, self.camera_pos, view_size) {
+                    let circle = ellipse::circle(0.0, 0.0, planet.radius);
+                    let planet_transform = camera.trans(planet.pos.x, planet.pos.y);
+                    ellipse(BLUE, circle, planet_transform, g);
+                    self.debug_point(g, &c, glyphs, WHITE, planet_transform, planet.pos);
                 }
-                let circle = ellipse::circle(0.0, 0.0, planet.radius);
-                ellipse(BLUE, circle, camera.trans(planet.pos.x, planet.pos.y), g);
+            }
+            if circle_in_view(self.magic_planet, 100.0, self.camera_pos, view_size) {
+                let planet_gfx = ellipse::circle(0.0, 0.0, 100.0);
+                ellipse(RED,
+                        planet_gfx,
+                        camera.trans(self.magic_planet.x, self.magic_planet.y),
+                        g);
             }
             for bullet in self.bullets.iter() {
-                if !circle_in_view(bullet.pos, BULLET_SIZE, self.camera_pos, view_size) {
-                    continue;
+                if circle_in_view(bullet.pos, BULLET_SIZE, self.camera_pos, view_size) {
+                    ellipse(RED, bullet_gfx, camera.trans(bullet.pos.x, bullet.pos.y), g);
                 }
-                let circle = ellipse::circle(0.0, 0.0, BULLET_SIZE);
-                ellipse(RED, circle, camera.trans(bullet.pos.x, bullet.pos.y), g);
             }
             let nearest_beam = [ship_pos.x,
                                 ship_pos.y,
                                 self.closest_planet_coords.x,
                                 self.closest_planet_coords.y];
-            line(GREEN, 1.0, nearest_beam, camera.trans(0.0, 0.0), g);
+            line(GREEN, 1.0, nearest_beam, camera, g);
 
             let attached = &self.space.get_planet(self.attached_planet);
             let attached_beam = [ship_pos.x, ship_pos.y, attached.pos.x, attached.pos.y];
-            line(BLUE, 1.0, attached_beam, camera.trans(0.0, 0.0), g);
+            line(BLUE, 1.0, attached_beam, camera, g);
         });
     }
 
     fn update(&mut self, args: &UpdateArgs, view_size: Size, input: &GameInput) {
+        if input.toggle_debug {
+            self.debug = !self.debug;
+        }
         let ship_pos = {
             let attached_planet = self.space.get_planet(self.attached_planet);
             let ship_pos = pt(attached_planet.pos.x + (self.rotation.cos() * self.height),
@@ -223,6 +255,7 @@ impl App {
                 self.height = closest_planet_distance + closest_planet.radius + (SHIP_SIZE / 2.0);
             }
 
+            // Put a bound on rotation. This may be pointless...?
             if self.rotation > PI {
                 self.rotation -= 2.0 * PI
             }
@@ -231,6 +264,7 @@ impl App {
             }
 
 
+            // Update the camera so that the ship stays in view with a margin around the screen.
             let x_margin = (1.0 / 4.0) * view_size.width as f64;
             let y_margin = (1.0 / 4.0) * view_size.height as f64;
             let view_width_with_margin = view_size.width as f64 * (3.0 / 4.0);
@@ -260,10 +294,18 @@ fn main() {
         .build()
         .unwrap();
 
+    let assets = find_folder::Search::ParentsThenKids(3, 3)
+        .for_folder("assets")
+        .unwrap();
+    let ref font = assets.join("FiraSans-Regular.ttf");
+    let factory = window.factory.clone();
+    let mut glyphs: Glyphs = Glyphs::new(font, factory).unwrap();
+
     // Create a new game and run it.
     let space = Space::new();
     let attached_planet_idx = space.get_nearby_planets()[0].0;
     let mut app = App {
+        debug: false,
         camera_pos: pt(-0.0, -0.0),
         jumping: false,
         fire_cooldown: 0.0,
@@ -274,6 +316,7 @@ fn main() {
         closest_planet_coords: pt(500.0, 500.0),
         bullets: vec![],
         space: Space::new(),
+        magic_planet: pt(500.0, 500.0),
     };
     let mut input = GameInput::new();
     let mut cursor: Option<[f64; 2]> = None;
@@ -308,6 +351,7 @@ fn main() {
             match press {
                 Button::Keyboard(key) => {
                     match key {
+                        Key::B => input.toggle_debug = true,
                         Key::Left | Key::A => input.left = false,
                         Key::Right | Key::E | Key::D => input.right = false,
                         Key::Up | Key::Comma | Key::W => input.up = false,
@@ -335,7 +379,10 @@ fn main() {
             if input.attach {
                 input.attach = false;
             }
+            if input.toggle_debug {
+                input.toggle_debug = false;
+            }
         }
-        app.render(&mut window, &e);
+        app.render(&mut window, &e, &mut glyphs);
     }
 }
