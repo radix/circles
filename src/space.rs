@@ -1,6 +1,7 @@
 extern crate rand;
 
 use std::collections::HashMap;
+use std::fmt;
 
 use self::rand::distributions::{IndependentSample, Range};
 
@@ -17,6 +18,12 @@ pub struct Point {
 impl Point {
     pub fn new(x: f64, y: f64) -> Point {
         Point { x: x, y: y }
+    }
+}
+
+impl fmt::Display for Point {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:.0}/{:.0}", self.x, self.y)
     }
 }
 
@@ -48,14 +55,14 @@ pub struct PlanetIndex {
     idx: usize,
 }
 
-// impl PlanetIndex {
-//     pub fn get_area(&self) -> (i32, i32) {
-//         self.area
-//     }
-//     pub fn get_index(&self) -> usize {
-//         self.idx
-//     }
-// }
+impl PlanetIndex {
+    pub fn get_area(&self) -> (i32, i32) {
+        self.area
+    }
+    pub fn get_index(&self) -> usize {
+        self.idx
+    }
+}
 
 
 /// Space is responsible for holding all the planets in the universe, generating planets when the
@@ -82,11 +89,6 @@ impl Space {
         let old_area = self.get_central_area();
         self.current_point = p;
         self.realize();
-        if self.get_central_area() != old_area {
-            println!("Moving area: {:?} ship is at {:?}",
-                     self.get_central_area(),
-                     p);
-        }
     }
 
     pub fn get_focus(&self) -> Point {
@@ -149,12 +151,9 @@ impl Space {
         for area in self.get_nearby_areas() {
             self.planets.entry(area).or_insert_with(|| {
                 let mut planets = Space::gen_planets();
-                println!("Area: {:?}", area);
                 for planet in planets.iter_mut() {
-                    println!("Planet: {:?}", planet);
                     planet.pos.x += area.0 as f64 * AREA_WIDTH;
                     planet.pos.y += area.1 as f64 * AREA_HEIGHT;
-                    println!("Post-processed: {:?}", planet);
                 }
                 planets
             });

@@ -2,7 +2,10 @@ extern crate piston_window;
 extern crate ncollide;
 extern crate nalgebra as na;
 extern crate find_folder;
+extern crate easer;
 
+use easer::functions as ease;
+use easer::functions::Easing;
 use std::f64::consts::PI;
 use piston_window::*;
 use ncollide::query;
@@ -16,6 +19,7 @@ use space::*;
 const SHIP_SIZE: f64 = 50.0;
 const SPEED: f64 = 5.0;
 const JUMP_SPEED: f64 = 3.0;
+const JUMP_HEIGHT: f64 = 400.0;
 const AIR_CONTROL_MOD: f64 = 50.0;
 const BULLET_SPEED: f64 = 1000.0;
 const BULLET_SIZE: f64 = 5.0;
@@ -28,6 +32,7 @@ struct GameInput {
     right: bool,
     down: bool,
     up: bool,
+    jump: bool,
     shoot_target: Option<Point>,
     attach: bool,
 }
@@ -40,6 +45,7 @@ impl GameInput {
             right: false,
             down: false,
             up: false,
+            jump: false,
             shoot_target: None,
             attach: false,
         }
@@ -50,7 +56,8 @@ impl GameInput {
 pub struct App {
     debug: bool,
     rotation: f64, // ship rotation / position along the orbit
-    jumping: bool,
+    flying: bool,
+    jumping: Option<f64>, // how long we have been jumping, if we are jumping.
     exit_speed: f64,
     height: f64,
     space: Space,
@@ -142,7 +149,7 @@ impl App {
                        glyphs,
                        WHITE,
                        ship_transform,
-                       &format!("{}", ship_pos));
+                       &format!("{} h={:.1}", ship_pos, self.height));
 
             for (pidx, planet) in planets {
                 if circle_in_view(planet.pos, planet.radius, self.camera_pos, view_size) {
@@ -154,10 +161,11 @@ impl App {
                                glyphs,
                                WHITE,
                                planet_transform,
-                               &format!("({}, {}) {}",
+                               &format!("({}, {}) {} r={:.1}",
                                         pidx.get_area().0,
                                         pidx.get_area().1,
-                                        planet.pos));
+                                        planet.pos,
+                                        planet.radius));
                 }
             }
             if circle_in_view(self.magic_planet, 100.0, self.camera_pos, view_size) {
@@ -243,30 +251,66 @@ impl App {
                 self.bullets.remove(cull_idx);
             }
 
-            if !self.jumping {
-                if input.left {
-                    self.rotation -= SPEED * args.dt;
+            match self.jumping {
+                None => {
+                    if input.jump {
+                        self.jumping = Some(0.0);
+                    }
                 }
-                if input.right {
-                    self.rotation += SPEED * args.dt;
+                Some(duration) => {
+                    // we're jumpiiiiing!
+                    let ground = attached_planet.radius + (SHIP_SIZE / 2.0);
+                    if duration < 0.25 {
+                        let range =
+                            ease::Expo::ease_out(duration as f32, // time so far
+                                                 0.0,
+                                                 1.0,
+                                                 0.5 as f32) as f64; // max duration (this is BS)
+                        self.height = ground + (range * JUMP_HEIGHT);
+                    } else {
+                        let range =
+                            ease::Expo::ease_in(((duration - 0.25) as f32).max(0.0),
+                                                0.0,
+                                                1.0,
+                                                0.5 as f32) as f64;
+                        self.height = (ground + JUMP_HEIGHT) - (range * JUMP_HEIGHT);
+                    }
+                    if duration >= 1.0 {
+                        println!("Done jumping! total duration: {:.2}", duration);
+                        self.jumping = None;
+                    } else {
+                        self.jumping = Some(duration + args.dt);
+                    }
                 }
+            }
+            if !self.flying {
                 if input.up {
-                    self.jumping = true;
+                    self.flying = true;
                     self.exit_speed = JUMP_SPEED;
                 }
             } else {
                 self.height += self.exit_speed;
+                if input.down {
+                    self.exit_speed -= ACCELERATION * args.dt;
+                }
+                if input.up {
+                    self.exit_speed += ACCELERATION * args.dt;
+                }
+            }
+
+            if self.flying || self.jumping.is_some() {
                 if input.left {
                     self.rotation -= SPEED * (AIR_CONTROL_MOD / self.height) * args.dt
                 }
                 if input.right {
                     self.rotation += SPEED * (AIR_CONTROL_MOD / self.height) * args.dt
                 }
-                if input.down {
-                    self.exit_speed -= ACCELERATION * args.dt;
+            } else {
+                if input.left {
+                    self.rotation -= SPEED * args.dt;
                 }
-                if input.up {
-                    self.exit_speed += ACCELERATION * args.dt;
+                if input.right {
+                    self.rotation += SPEED * args.dt;
                 }
             }
 
@@ -294,7 +338,8 @@ impl App {
                 if let Some(_) = collided {
                     // We are landing on a new planet
                     self.attached_planet = planet_index;
-                    self.jumping = false;
+                    self.flying = false;
+                    self.jumping = None;
                     self.height = planet.radius + (SHIP_SIZE / 2.0);
                     self.rotation = direction_from_to(planet.pos, ship_pos);
                     self.exit_speed = 0.0;
@@ -360,7 +405,8 @@ fn main() {
     let mut app = App {
         debug: false,
         camera_pos: pt(-0.0, -0.0),
-        jumping: false,
+        flying: false,
+        jumping: None,
         fire_cooldown: 0.0,
         exit_speed: 0.0,
         height: space.get_planet(attached_planet_idx).radius,
@@ -387,6 +433,7 @@ fn main() {
                         Key::Right | Key::E | Key::D => input.right = true,
                         Key::Up | Key::Comma | Key::W => input.up = true,
                         Key::Down | Key::O | Key::S => input.down = true,
+                        Key::Space => input.jump = true,
                         x => println!("Keyboard Key {:?}", x),
                     }
                 }
@@ -409,6 +456,7 @@ fn main() {
                         Key::Right | Key::E | Key::D => input.right = false,
                         Key::Up | Key::Comma | Key::W => input.up = false,
                         Key::Down | Key::O | Key::S => input.down = false,
+                        Key::Space => input.jump = false,
                         _ => {}
                     }
                 }
