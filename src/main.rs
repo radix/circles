@@ -105,20 +105,15 @@ fn quad_direction(radians: f64) -> Cardinal4 {
 }
 
 impl App {
-    fn debug_point(&self,
-                   g: &mut G2d,
-                   context: &piston_window::Context,
-                   glyphs: &mut Glyphs,
-                   color: [f32; 4],
-                   transform: [[f64; 3]; 2],
-                   point: Point) {
+    fn debug(&self,
+             g: &mut G2d,
+             context: &piston_window::Context,
+             glyphs: &mut Glyphs,
+             color: [f32; 4],
+             transform: [[f64; 3]; 2],
+             text: &str) {
         if self.debug {
-            // Draw the x/y coords of the ship
-            text::Text::new_color(color, 20).draw(&format!("{:.0}/{:.0}", point.x, point.y),
-                                                  glyphs,
-                                                  &context.draw_state,
-                                                  transform,
-                                                  g);
+            text::Text::new_color(color, 20).draw(text, glyphs, &context.draw_state, transform, g);
         }
     }
 
@@ -142,14 +137,27 @@ impl App {
                 .rot_rad(self.rotation)
                 .trans(-(SHIP_SIZE / 2.0), -(SHIP_SIZE / 2.0));
             rectangle(RED, square, ship_transform, g);
-            self.debug_point(g, &c, glyphs, WHITE, ship_transform, ship_pos);
+            self.debug(g,
+                       &c,
+                       glyphs,
+                       WHITE,
+                       ship_transform,
+                       &format!("{}", ship_pos));
 
-            for (_, planet) in planets {
+            for (pidx, planet) in planets {
                 if circle_in_view(planet.pos, planet.radius, self.camera_pos, view_size) {
                     let circle = ellipse::circle(0.0, 0.0, planet.radius);
                     let planet_transform = camera.trans(planet.pos.x, planet.pos.y);
                     ellipse(BLUE, circle, planet_transform, g);
-                    self.debug_point(g, &c, glyphs, WHITE, planet_transform, planet.pos);
+                    self.debug(g,
+                               &c,
+                               glyphs,
+                               WHITE,
+                               planet_transform,
+                               &format!("({}, {}) {}",
+                                        pidx.get_area().0,
+                                        pidx.get_area().1,
+                                        planet.pos));
                 }
             }
             if circle_in_view(self.magic_planet, 100.0, self.camera_pos, view_size) {
@@ -290,12 +298,9 @@ impl App {
                     self.height = planet.radius + (SHIP_SIZE / 2.0);
                     self.rotation = direction_from_to(planet.pos, ship_pos);
                     self.exit_speed = 0.0;
-                    println!("Attached to planet: {:?} {:?}", planet_index, planet);
                 }
             }
             if input.attach {
-                // should we disallow attaching to the same planet? it basically allows player to
-                // hard-stop
                 self.attached_planet = closest_planet_idx;
                 self.exit_speed = 0.0;
                 self.rotation = (ship_pos.y - self.closest_planet_coords.y)
