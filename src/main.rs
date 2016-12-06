@@ -73,6 +73,37 @@ fn circle_in_view(point: Point,
     point.y + radius > camera.y && point.y - radius < camera.y + view_size.height as f64
 }
 
+/// Get the direction (in Radians) from one point to another.
+fn direction_from_to(from: Point, to: Point) -> f64 {
+    (to.y - from.y).atan2(to.x - from.x)
+}
+
+const DOWN_RIGHT_RAD: f64 = PI / 4.0;
+const UP_RIGHT_RAD: f64 = -DOWN_RIGHT_RAD;
+const DOWN_LEFT_RAD: f64 = PI * (3.0 / 4.0);
+const UP_LEFT_RAD: f64 = -DOWN_LEFT_RAD;
+
+
+#[derive(Eq, PartialEq, Ord, PartialOrd, Debug)]
+enum Cardinal4 {
+    Up,
+    Down,
+    Left,
+    Right,
+}
+
+fn quad_direction(radians: f64) -> Cardinal4 {
+    if DOWN_RIGHT_RAD > radians && radians > UP_RIGHT_RAD {
+        Cardinal4::Right
+    } else if DOWN_LEFT_RAD > radians && radians > DOWN_RIGHT_RAD {
+        Cardinal4::Down
+    } else if UP_LEFT_RAD < radians && radians < UP_RIGHT_RAD {
+        Cardinal4::Up
+    } else {
+        Cardinal4::Left
+    }
+}
+
 impl App {
     fn debug_point(&self,
                    g: &mut G2d,
@@ -90,6 +121,7 @@ impl App {
                                                   g);
         }
     }
+
     fn render(&self, mut window: &mut PistonWindow, event: &Event, glyphs: &mut Glyphs) {
         const GREEN: [f32; 4] = [0.0, 1.0, 0.0, 1.0];
         const RED: [f32; 4] = [1.0, 0.0, 0.0, 1.0];
@@ -138,6 +170,19 @@ impl App {
                                 self.closest_planet_coords.y];
             line(GREEN, 1.0, nearest_beam, camera, g);
 
+            {
+                let direction = direction_from_to(ship_pos, self.magic_planet);
+                let cardinal = quad_direction(direction);
+                let width = view_size.width as f64;
+                let height = view_size.height as f64;
+                let hint_line = match cardinal {
+                    Cardinal4::Up => [0.0, 5.0, width, 5.0],
+                    Cardinal4::Right => [width - 2.5, 0.0, width - 2.5, height],
+                    Cardinal4::Left => [2.5, 0.0, 2.5, height],
+                    Cardinal4::Down => [0.0, height - 2.5, width, height - 2.5],
+                };
+                line(RED, 5.0, hint_line, c.transform, g);
+            }
             let attached = &self.space.get_planet(self.attached_planet);
             let attached_beam = [ship_pos.x, ship_pos.y, attached.pos.x, attached.pos.y];
             line(BLUE, 1.0, attached_beam, camera, g);
@@ -148,13 +193,15 @@ impl App {
         if input.toggle_debug {
             self.debug = !self.debug;
         }
+        // this next little bit of scope weirdness is brought to you by mutable borrows being
+        // confusing
         let ship_pos = {
             let attached_planet = self.space.get_planet(self.attached_planet);
             let ship_pos = pt(attached_planet.pos.x + (self.rotation.cos() * self.height),
                               attached_planet.pos.y + (self.rotation.sin() * self.height));
             if let Some(target) = input.shoot_target {
                 if self.fire_cooldown <= 0.0 {
-                    let angle = (target.y - ship_pos.y).atan2(target.x - ship_pos.x);
+                    let angle = direction_from_to(ship_pos, target);
                     let bullet = Bullet {
                         pos: ship_pos,
                         dir: angle,
@@ -172,8 +219,9 @@ impl App {
             for (idx, bullet) in self.bullets.iter_mut().enumerate() {
                 bullet.pos.x = bullet.pos.x + (bullet.speed * args.dt * bullet.dir.cos());
                 bullet.pos.y = bullet.pos.y + (bullet.speed * args.dt * bullet.dir.sin());
-                // kind of a dumb hack to determine when to cull bullets. It'd be better if we had the
-                // current view's bounding box (+ margin). or, alternatively, give each bullet a TTL.
+                // kind of a dumb hack to determine when to cull bullets. It'd be better if we had
+                // the current view's bounding box (+ margin). or, alternatively, give each bullet
+                // a TTL.
                 if (bullet.pos.x - ship_pos.x).abs() > 5000.0 ||
                    (bullet.pos.y - ship_pos.y).abs() > 5000.0 {
                     // rejigger the index so when we delete the items they compensate for previous
@@ -240,7 +288,7 @@ impl App {
                     self.attached_planet = planet_index;
                     self.jumping = false;
                     self.height = planet.radius + (SHIP_SIZE / 2.0);
-                    self.rotation = (ship_pos.y - planet.pos.y).atan2(ship_pos.x - planet.pos.x);
+                    self.rotation = direction_from_to(planet.pos, ship_pos);
                     self.exit_speed = 0.0;
                     println!("Attached to planet: {:?} {:?}", planet_index, planet);
                 }
