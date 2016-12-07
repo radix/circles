@@ -140,7 +140,8 @@ impl App {
         let square = rectangle::square(0.0, 0.0, SHIP_SIZE);
         let view_size = window.size();
         let ship_pos = self.space.get_focus();
-        let (planets, bugs) = self.space.get_nearby_planets_and_bugs();
+        let planets = self.space.get_nearby_planets();
+        let bugs = self.space.get_nearby_bugs();
         let bullet_gfx = ellipse::circle(0.0, 0.0, BULLET_SIZE);
 
         window.draw_2d(event, |c, g| {
@@ -318,11 +319,7 @@ impl App {
             let mut closest_planet_idx: PlanetIndex = self.attached_planet;
             let mut closest_planet = attached_planet;
 
-            let (planets, crawlers) = self.space.get_nearby_planets_and_bugs();
-
-            for crawler in crawlers.iter() {
-                // crawler.rotation -= CRAWLER_SPEED;
-            }
+            let planets = self.space.get_nearby_planets();
 
             for (planet_index, planet) in planets {
                 let planet_ball = Ball::new(planet.radius);
@@ -384,6 +381,9 @@ impl App {
             }
             ship_pos
         };
+        for crawler in self.space.get_nearby_bugs_mut() {
+            crawler.rotation -= CRAWLER_SPEED * args.dt;
+        }
         self.space.focus(ship_pos);
     }
 }
@@ -405,7 +405,7 @@ fn main() {
 
     // Create a new game and run it.
     let space = Space::new();
-    let attached_planet_idx = space.get_nearby_planets_and_bugs().0[0].0;
+    let attached_planet_idx = space.get_nearby_planets()[0].0;
     let mut app = App {
         debug: false,
         camera_pos: pt(-0.0, -0.0),

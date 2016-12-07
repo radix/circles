@@ -99,10 +99,8 @@ impl Space {
     }
 
     /// Return all nearby planets and bugs.
-    pub fn get_nearby_planets_and_bugs(&self) -> (Vec<(PlanetIndex, &Planet)>, Vec<&CrawlerBug>) {
-        // This function iterates over get_nearby_areas twice, for no good reason.
-
-        let planets = self.get_nearby_areas()
+    pub fn get_nearby_planets(&self) -> Vec<(PlanetIndex, &Planet)> {
+        self.get_nearby_areas()
             .iter()
             .flat_map(|area| {
                 let ref planets = self.areas
@@ -122,21 +120,51 @@ impl Space {
                     })
                     .collect();
                 planets
-
             })
-            .collect();
-        let bugs = self.get_nearby_areas()
+            .collect()
+    }
+
+    pub fn get_nearby_bugs(&self) -> Vec<&CrawlerBug> {
+        self.get_nearby_areas()
             .iter()
             .flat_map(|area| {
-                let x = self.areas.get(&area);
-                let y = x.expect(&format!("Uninitialized BUG area {:?} when in area {:?}",
-                                          area,
-                                          self.get_central_area()));
-                let z = &y.1;
-                z
+                &self.areas
+                    .get(&area)
+                    .expect(&format!("Uninitialized BUG area {:?} when in area {:?}",
+                                     area,
+                                     self.get_central_area()))
+                    .1
             })
-            .collect();
-        (planets, bugs)
+            .collect()
+    }
+
+    pub fn get_nearby_bugs_mut(&mut self) -> Vec<&mut CrawlerBug> {
+        let nearby_areas = self.get_nearby_areas();
+        let mut buggies = vec![];
+        // okay, so long story.
+
+        // Context: This function wants to return multiple mutable references in a Vec -- meaning,
+        // they will live at the same time. Normally, rust will not allow multiple mutable
+        // references into the same value, even if they are "disjoint" -- that is, non-overlapping
+        // in memory. That means that if I try to call HashMap::get_mut a bunch of times and save
+        // away all of those mutable references, rustc will barf because it can't prove I didn't
+        // pass the same key to get_mut multiple times (meaning the same &mut value would be
+        // returned multiple times, which would actually be unsafe).
+
+        // However, HashMap and other built-in datatypes have a trick up their sleeves: .iter_mut()
+        // apparently does some unsafe magic to hand out mutable references that can live at the
+        // same time. The reasoning why this is safe is simple: since it's iterating over all the
+        // values only once, it can be sure that it's only handing out one &mut per value -- that
+        // is, all returned references are disjoint.
+
+        // Of course, this means that we have to walk the entire hashmap, when we really just need
+        // access to a few keys, so this is not a scalable solution.
+        for (k, &mut (_, ref mut v)) in self.areas.iter_mut() {
+            if nearby_areas.contains(k) {
+                buggies.extend(v);
+            }
+        }
+        buggies
     }
 
     /// Look up a specific planet. This is safe only when using a PlanetIndex returned from *this
