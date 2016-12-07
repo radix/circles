@@ -14,6 +14,7 @@ mod space;
 use space::*;
 
 const SHIP_SIZE: f64 = 50.0;
+const JUMPER_SIZE: f64 = 25.0;
 const SPEED: f64 = 5.0;
 const FLY_SPEED: f64 = 3.0;
 const JUMP_SPEED: f64 = 20.0;
@@ -109,6 +110,11 @@ fn quad_direction(radians: f64) -> Cardinal4 {
     }
 }
 
+fn rotated_position(origin: Point, rotation: f64, height: f64) -> Point {
+    pt(origin.x + (rotation.cos() * height),
+       origin.y + (rotation.sin() * height))
+}
+
 impl App {
     fn debug(&self,
              g: &mut G2d,
@@ -177,10 +183,12 @@ impl App {
 
             for bug in bugs {
                 let planet = self.space.get_planet(bug.attached);
-                let bug_pos = planet.pos;
-                if circle_in_view(bug_pos, SHIP_SIZE / 2.0, self.camera_pos, view_size) {
-                    let bug_gfx = rectangle::square(0.0, 0.0, SHIP_SIZE);
-                    rectangle(DARKRED, bug_gfx, camera.trans(bug_pos.x, bug_pos.y), g);
+                let bug_pos = rotated_position(planet.pos,
+                                               bug.rotation,
+                                               planet.radius + bug.altitude + JUMPER_SIZE);
+                if circle_in_view(bug_pos, JUMPER_SIZE, self.camera_pos, view_size) {
+                    let bug_gfx = ellipse::circle(0.0, 0.0, JUMPER_SIZE);
+                    ellipse(DARKRED, bug_gfx, camera.trans(bug_pos.x, bug_pos.y), g);
                 }
             }
             for bullet in self.bullets.iter() {
@@ -221,8 +229,7 @@ impl App {
         // confusing
         let ship_pos = {
             let attached_planet = self.space.get_planet(self.attached_planet);
-            let ship_pos = pt(attached_planet.pos.x + (self.rotation.cos() * self.height),
-                              attached_planet.pos.y + (self.rotation.sin() * self.height));
+            let ship_pos = rotated_position(attached_planet.pos, self.rotation, self.height);
             if let Some(target) = input.shoot_target {
                 if self.fire_cooldown <= 0.0 {
                     let angle = direction_from_to(ship_pos, target);

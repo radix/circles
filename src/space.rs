@@ -65,7 +65,7 @@ impl PlanetIndex {
 pub struct JumperBug {
     pub attached: PlanetIndex,
     pub rotation: f64,
-    pub height: f64,
+    pub altitude: f64,
 }
 
 type Area = (i32, i32);
@@ -101,6 +101,8 @@ impl Space {
 
     /// Return all nearby planets and jumpers.
     pub fn get_nearby_planets_and_bugs(&self) -> (Vec<(PlanetIndex, &Planet)>, Vec<&JumperBug>) {
+        // This function iterates over get_nearby_areas twice, for no good reason.
+
         let planets = self.get_nearby_areas()
             .iter()
             .flat_map(|area| {
@@ -221,7 +223,7 @@ impl Space {
         let range_bool = Range::new(0, 2);
         let mut rng = rand::thread_rng();
         let bugs = planets.iter()
-            .filter_map(|&(pidx, planet)| {
+            .filter_map(|&(pidx, _)| {
                 // half the planets will have bugaroos.
                 let rando = range_bool.ind_sample(&mut rng);
                 println!("A buggy number: {:?}", rando);
@@ -229,7 +231,7 @@ impl Space {
                     Some(JumperBug {
                         attached: pidx,
                         rotation: 0.0,
-                        height: planet.radius,
+                        altitude: 0.0,
                     })
                 } else {
                     None
