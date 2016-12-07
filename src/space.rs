@@ -62,10 +62,9 @@ impl PlanetIndex {
 }
 
 #[derive(Debug)]
-pub struct JumperBug {
+pub struct CrawlerBug {
     pub attached: PlanetIndex,
     pub rotation: f64,
-    pub altitude: f64,
 }
 
 type Area = (i32, i32);
@@ -76,7 +75,7 @@ type Area = (i32, i32);
 #[derive(Debug)]
 pub struct Space {
     // Keep this private!
-    areas: HashMap<Area, (Vec<Planet>, Vec<JumperBug>)>,
+    areas: HashMap<Area, (Vec<Planet>, Vec<CrawlerBug>)>,
     current_point: Point,
 }
 
@@ -99,8 +98,8 @@ impl Space {
         return self.current_point;
     }
 
-    /// Return all nearby planets and jumpers.
-    pub fn get_nearby_planets_and_bugs(&self) -> (Vec<(PlanetIndex, &Planet)>, Vec<&JumperBug>) {
+    /// Return all nearby planets and bugs.
+    pub fn get_nearby_planets_and_bugs(&self) -> (Vec<(PlanetIndex, &Planet)>, Vec<&CrawlerBug>) {
         // This function iterates over get_nearby_areas twice, for no good reason.
 
         let planets = self.get_nearby_areas()
@@ -129,12 +128,12 @@ impl Space {
         let bugs = self.get_nearby_areas()
             .iter()
             .flat_map(|area| {
-                &self.areas
-                    .get(&area)
-                    .expect(&format!("Uninitialized BUG area {:?} when in area {:?}",
-                                     area,
-                                     self.get_central_area()))
-                    .1
+                let x = self.areas.get(&area);
+                let y = x.expect(&format!("Uninitialized BUG area {:?} when in area {:?}",
+                                          area,
+                                          self.get_central_area()));
+                let z = &y.1;
+                z
             })
             .collect();
         (planets, bugs)
@@ -219,26 +218,23 @@ impl Space {
             .collect()
     }
 
-    fn gen_bugs(planets: &Vec<(PlanetIndex, &Planet)>) -> Vec<JumperBug> {
+    fn gen_bugs(planets: &Vec<(PlanetIndex, &Planet)>) -> Vec<CrawlerBug> {
         let range_bool = Range::new(0, 2);
         let mut rng = rand::thread_rng();
         let bugs = planets.iter()
             .filter_map(|&(pidx, _)| {
                 // half the planets will have bugaroos.
                 let rando = range_bool.ind_sample(&mut rng);
-                println!("A buggy number: {:?}", rando);
                 if rando == 1 {
-                    Some(JumperBug {
+                    Some(CrawlerBug {
                         attached: pidx,
                         rotation: 0.0,
-                        altitude: 0.0,
                     })
                 } else {
                     None
                 }
             })
             .collect();
-        println!("Generated some bugs! {:?}", bugs);
         bugs
     }
 }

@@ -14,7 +14,8 @@ mod space;
 use space::*;
 
 const SHIP_SIZE: f64 = 50.0;
-const JUMPER_SIZE: f64 = 25.0;
+const CRAWLER_SIZE: f64 = 25.0;
+const CRAWLER_SPEED: f64 = 2.0;
 const SPEED: f64 = 5.0;
 const FLY_SPEED: f64 = 3.0;
 const JUMP_SPEED: f64 = 20.0;
@@ -183,11 +184,10 @@ impl App {
 
             for bug in bugs {
                 let planet = self.space.get_planet(bug.attached);
-                let bug_pos = rotated_position(planet.pos,
-                                               bug.rotation,
-                                               planet.radius + bug.altitude + JUMPER_SIZE);
-                if circle_in_view(bug_pos, JUMPER_SIZE, self.camera_pos, view_size) {
-                    let bug_gfx = ellipse::circle(0.0, 0.0, JUMPER_SIZE);
+                let bug_pos =
+                    rotated_position(planet.pos, bug.rotation, planet.radius + CRAWLER_SIZE);
+                if circle_in_view(bug_pos, CRAWLER_SIZE, self.camera_pos, view_size) {
+                    let bug_gfx = ellipse::circle(0.0, 0.0, CRAWLER_SIZE);
                     ellipse(DARKRED, bug_gfx, camera.trans(bug_pos.x, bug_pos.y), g);
                 }
             }
@@ -318,7 +318,13 @@ impl App {
             let mut closest_planet_idx: PlanetIndex = self.attached_planet;
             let mut closest_planet = attached_planet;
 
-            for (planet_index, planet) in self.space.get_nearby_planets_and_bugs().0 {
+            let (planets, crawlers) = self.space.get_nearby_planets_and_bugs();
+
+            for crawler in crawlers.iter() {
+                // crawler.rotation -= CRAWLER_SPEED;
+            }
+
+            for (planet_index, planet) in planets {
                 let planet_ball = Ball::new(planet.radius);
                 let planet_pos = Isometry2::new(Vector2::new(planet.pos.x, planet.pos.y),
                                                 na::zero());
