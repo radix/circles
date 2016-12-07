@@ -125,6 +125,7 @@ impl App {
     fn render(&self, mut window: &mut PistonWindow, event: &Event, glyphs: &mut Glyphs) {
         const GREEN: [f32; 4] = [0.0, 1.0, 0.0, 1.0];
         const RED: [f32; 4] = [1.0, 0.0, 0.0, 1.0];
+        const DARKRED: [f32; 4] = [0.5, 0.0, 0.0, 1.0];
         const BLUE: [f32; 4] = [0.0, 0.0, 1.0, 1.0];
         const BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
         const WHITE: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
@@ -132,7 +133,7 @@ impl App {
         let square = rectangle::square(0.0, 0.0, SHIP_SIZE);
         let view_size = window.size();
         let ship_pos = self.space.get_focus();
-        let planets = self.space.get_nearby_planets();
+        let (planets, bugs) = self.space.get_nearby_planets_and_bugs();
         let bullet_gfx = ellipse::circle(0.0, 0.0, BULLET_SIZE);
 
         window.draw_2d(event, |c, g| {
@@ -172,6 +173,15 @@ impl App {
                         planet_gfx,
                         camera.trans(self.magic_planet.x, self.magic_planet.y),
                         g);
+            }
+
+            for bug in bugs {
+                let planet = self.space.get_planet(bug.attached);
+                let bug_pos = planet.pos;
+                if circle_in_view(bug_pos, SHIP_SIZE / 2.0, self.camera_pos, view_size) {
+                    let bug_gfx = rectangle::square(0.0, 0.0, SHIP_SIZE);
+                    rectangle(DARKRED, bug_gfx, camera.trans(bug_pos.x, bug_pos.y), g);
+                }
             }
             for bullet in self.bullets.iter() {
                 if circle_in_view(bullet.pos, BULLET_SIZE, self.camera_pos, view_size) {
@@ -301,7 +311,7 @@ impl App {
             let mut closest_planet_idx: PlanetIndex = self.attached_planet;
             let mut closest_planet = attached_planet;
 
-            for (planet_index, planet) in self.space.get_nearby_planets() {
+            for (planet_index, planet) in self.space.get_nearby_planets_and_bugs().0 {
                 let planet_ball = Ball::new(planet.radius);
                 let planet_pos = Isometry2::new(Vector2::new(planet.pos.x, planet.pos.y),
                                                 na::zero());
@@ -382,7 +392,7 @@ fn main() {
 
     // Create a new game and run it.
     let space = Space::new();
-    let attached_planet_idx = space.get_nearby_planets()[0].0;
+    let attached_planet_idx = space.get_nearby_planets_and_bugs().0[0].0;
     let mut app = App {
         debug: false,
         camera_pos: pt(-0.0, -0.0),

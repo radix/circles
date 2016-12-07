@@ -61,6 +61,14 @@ impl PlanetIndex {
     }
 }
 
+#[derive(Debug)]
+pub struct JumperBug {
+    pub attached: PlanetIndex,
+    pub rotation: f64,
+    pub height: f64,
+}
+
+type Area = (i32, i32);
 
 /// Space is responsible for holding all the planets in the universe, generating planets when the
 /// ship moves through space, and also giving a view of nearby planets. It is responsible for
@@ -68,8 +76,9 @@ impl PlanetIndex {
 #[derive(Debug)]
 pub struct Space {
     // Keep this private!
-    planets: HashMap<(i32, i32), Vec<Planet>>,
+    planets: HashMap<Area, Vec<Planet>>,
     current_point: Point,
+    jumpers: HashMap<Area, Vec<JumperBug>>,
 }
 
 impl Space {
@@ -77,6 +86,7 @@ impl Space {
         let mut sp = Space {
             planets: HashMap::new(),
             current_point: pt(0.0, 0.0),
+            jumpers: HashMap::new(),
         };
         sp.realize();
         sp
@@ -91,25 +101,41 @@ impl Space {
         return self.current_point;
     }
 
-    /// Return all nearby planets.
-    pub fn get_nearby_planets(&self) -> Vec<(PlanetIndex, &Planet)> {
-        let mut planets = vec![];
-        for area in self.get_nearby_areas() {
-            if let Some(ps) = self.planets.get(&area) {
-                for (i, p) in ps.iter().enumerate() {
-                    planets.push((PlanetIndex {
-                                      area: area,
-                                      idx: i,
-                                  },
-                                  p));
-                }
-            } else {
-                panic!("Uninitialized area {:?} when in area {:?}",
-                       area,
-                       self.get_central_area());
-            }
-        }
-        planets
+    /// Return all nearby planets and jumpers.
+    pub fn get_nearby_planets_and_bugs(&self) -> (Vec<(PlanetIndex, &Planet)>, Vec<&JumperBug>) {
+        let planets = self.get_nearby_areas()
+            .iter()
+            .flat_map(|area| {
+                let planets = self.planets
+                    .get(&area)
+                    .expect(&format!("Uninitialized PLANET area {:?} when in area {:?}",
+                                     area,
+                                     self.get_central_area()));
+                let planets: Vec<(PlanetIndex, &Planet)> = planets.iter()
+                    .enumerate()
+                    .map(|(i, p)| {
+                        (PlanetIndex {
+                             area: area.clone(),
+                             idx: i,
+                         },
+                         p)
+                    })
+                    .collect();
+                planets
+
+            })
+            .collect();
+        let bugs = self.get_nearby_areas()
+            .iter()
+            .flat_map(|area| {
+                self.jumpers
+                    .get(&area)
+                    .expect(&format!("Uninitialized BUG area {:?} when in area {:?}",
+                                     area,
+                                     self.get_central_area()))
+            })
+            .collect();
+        (planets, bugs)
     }
 
     /// Look up a specific planet. This is safe only when using a PlanetIndex returned from *this
@@ -145,14 +171,28 @@ impl Space {
     /// Generate planets around the current center point
     fn realize(&mut self) {
         for area in self.get_nearby_areas() {
-            self.planets.entry(area).or_insert_with(|| {
+            if !self.planets.contains_key(&area) {
                 let mut planets = Space::gen_planets();
                 for planet in planets.iter_mut() {
                     planet.pos.x += area.0 as f64 * AREA_WIDTH;
                     planet.pos.y += area.1 as f64 * AREA_HEIGHT;
                 }
-                planets
-            });
+                // this check shoooould be unnecessary...
+                if !self.jumpers.contains_key(&area) {
+                    let planets_with_indices = planets.iter()
+                        .enumerate()
+                        .map(|(i, &ref p)| {
+                            (PlanetIndex {
+                                 area: area,
+                                 idx: i,
+                             },
+                             p)
+                        })
+                        .collect();
+                    self.jumpers.insert(area, Space::gen_bugs(&planets_with_indices));
+                }
+                self.planets.insert(area, planets);
+            }
         }
     }
 
@@ -175,5 +215,28 @@ impl Space {
                 }
             })
             .collect()
+    }
+
+    fn gen_bugs(planets: &Vec<(PlanetIndex, &Planet)>) -> Vec<JumperBug> {
+        let range_bool = Range::new(0, 2);
+        let mut rng = rand::thread_rng();
+        let bugs = planets.iter()
+            .filter_map(|&(pidx, planet)| {
+                // half the planets will have bugaroos.
+                let rando = range_bool.ind_sample(&mut rng);
+                println!("A buggy number: {:?}", rando);
+                if rando == 1 {
+                    Some(JumperBug {
+                        attached: pidx,
+                        rotation: 0.0,
+                        height: planet.radius,
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect();
+        println!("Generated some bugs! {:?}", bugs);
+        bugs
     }
 }
