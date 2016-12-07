@@ -44,7 +44,7 @@ pub struct Bullet {
     pub speed: f64,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PlanetIndex {
     // Keep this private, so users can't construct PlanetIndexes. This marginally improves safety,
     // since Space::get_planet is unsafe if passed PlanetIndexes that weren't returned from
@@ -58,9 +58,6 @@ pub struct PlanetIndex {
 impl PlanetIndex {
     pub fn get_area(&self) -> (i32, i32) {
         self.area
-    }
-    pub fn get_index(&self) -> usize {
-        self.idx
     }
 }
 
@@ -86,7 +83,6 @@ impl Space {
     }
 
     pub fn focus(&mut self, p: Point) {
-        let old_area = self.get_central_area();
         self.current_point = p;
         self.realize();
     }

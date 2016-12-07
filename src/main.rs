@@ -2,10 +2,7 @@ extern crate piston_window;
 extern crate ncollide;
 extern crate nalgebra as na;
 extern crate find_folder;
-extern crate easer;
 
-use easer::functions as ease;
-use easer::functions::Easing;
 use std::f64::consts::PI;
 use piston_window::*;
 use ncollide::query;
@@ -18,13 +15,14 @@ use space::*;
 
 const SHIP_SIZE: f64 = 50.0;
 const SPEED: f64 = 5.0;
-const JUMP_SPEED: f64 = 3.0;
-const JUMP_HEIGHT: f64 = 400.0;
-const AIR_CONTROL_MOD: f64 = 50.0;
+const FLY_SPEED: f64 = 3.0;
+const JUMP_SPEED: f64 = 20.0;
+const AIR_CONTROL_MOD: f64 = 0.50;
 const BULLET_SPEED: f64 = 1000.0;
 const BULLET_SIZE: f64 = 5.0;
 const ACCELERATION: f64 = 5.0;
 const FIRE_COOLDOWN: f64 = 0.1;
+const GRAVITY: f64 = 50.0;
 
 struct GameInput {
     toggle_debug: bool,
@@ -57,7 +55,7 @@ pub struct App {
     debug: bool,
     rotation: f64, // ship rotation / position along the orbit
     flying: bool,
-    jumping: Option<f64>, // how long we have been jumping, if we are jumping.
+    jumping: bool,
     exit_speed: f64,
     height: f64,
     space: Space,
@@ -251,42 +249,10 @@ impl App {
                 self.bullets.remove(cull_idx);
             }
 
-            match self.jumping {
-                None => {
-                    if input.jump {
-                        self.jumping = Some(0.0);
-                    }
-                }
-                Some(duration) => {
-                    // we're jumpiiiiing!
-                    let ground = attached_planet.radius + (SHIP_SIZE / 2.0);
-                    if duration < 0.25 {
-                        let range =
-                            ease::Expo::ease_out(duration as f32, // time so far
-                                                 0.0,
-                                                 1.0,
-                                                 0.5 as f32) as f64; // max duration (this is BS)
-                        self.height = ground + (range * JUMP_HEIGHT);
-                    } else {
-                        let range =
-                            ease::Expo::ease_in(((duration - 0.25) as f32).max(0.0),
-                                                0.0,
-                                                1.0,
-                                                0.5 as f32) as f64;
-                        self.height = (ground + JUMP_HEIGHT) - (range * JUMP_HEIGHT);
-                    }
-                    if duration >= 1.0 {
-                        println!("Done jumping! total duration: {:.2}", duration);
-                        self.jumping = None;
-                    } else {
-                        self.jumping = Some(duration + args.dt);
-                    }
-                }
-            }
             if !self.flying {
                 if input.up {
                     self.flying = true;
-                    self.exit_speed = JUMP_SPEED;
+                    self.exit_speed = FLY_SPEED;
                 }
             } else {
                 self.height += self.exit_speed;
@@ -298,12 +264,27 @@ impl App {
                 }
             }
 
-            if self.flying || self.jumping.is_some() {
+            if !self.jumping {
+                if input.jump {
+                    self.jumping = true;
+                    self.exit_speed = JUMP_SPEED;
+                }
+            } else {
+                self.exit_speed -= GRAVITY * args.dt;
+                self.height += self.exit_speed;
+                if !input.jump {
+                    if self.exit_speed > (JUMP_SPEED / 2.0) {
+                        self.exit_speed = JUMP_SPEED / 2.0;
+                    }
+                }
+            }
+
+            if self.flying || self.jumping {
                 if input.left {
-                    self.rotation -= SPEED * (AIR_CONTROL_MOD / self.height) * args.dt
+                    self.rotation -= SPEED * AIR_CONTROL_MOD * args.dt
                 }
                 if input.right {
-                    self.rotation += SPEED * (AIR_CONTROL_MOD / self.height) * args.dt
+                    self.rotation += SPEED * AIR_CONTROL_MOD * args.dt
                 }
             } else {
                 if input.left {
@@ -339,13 +320,13 @@ impl App {
                     // We are landing on a new planet
                     self.attached_planet = planet_index;
                     self.flying = false;
-                    self.jumping = None;
+                    self.jumping = false;
                     self.height = planet.radius + (SHIP_SIZE / 2.0);
                     self.rotation = direction_from_to(planet.pos, ship_pos);
                     self.exit_speed = 0.0;
                 }
             }
-            if input.attach {
+            if input.attach && closest_planet_idx != self.attached_planet {
                 self.attached_planet = closest_planet_idx;
                 self.exit_speed = 0.0;
                 self.rotation = (ship_pos.y - self.closest_planet_coords.y)
@@ -406,7 +387,7 @@ fn main() {
         debug: false,
         camera_pos: pt(-0.0, -0.0),
         flying: false,
-        jumping: None,
+        jumping: false,
         fire_cooldown: 0.0,
         exit_speed: 0.0,
         height: space.get_planet(attached_planet_idx).radius,
