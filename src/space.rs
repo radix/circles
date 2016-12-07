@@ -76,17 +76,15 @@ type Area = (i32, i32);
 #[derive(Debug)]
 pub struct Space {
     // Keep this private!
-    planets: HashMap<Area, Vec<Planet>>,
+    areas: HashMap<Area, (Vec<Planet>, Vec<JumperBug>)>,
     current_point: Point,
-    jumpers: HashMap<Area, Vec<JumperBug>>,
 }
 
 impl Space {
     pub fn new() -> Space {
         let mut sp = Space {
-            planets: HashMap::new(),
+            areas: HashMap::new(),
             current_point: pt(0.0, 0.0),
-            jumpers: HashMap::new(),
         };
         sp.realize();
         sp
@@ -106,11 +104,12 @@ impl Space {
         let planets = self.get_nearby_areas()
             .iter()
             .flat_map(|area| {
-                let planets = self.planets
+                let ref planets = self.areas
                     .get(&area)
                     .expect(&format!("Uninitialized PLANET area {:?} when in area {:?}",
                                      area,
-                                     self.get_central_area()));
+                                     self.get_central_area()))
+                    .0;
                 let planets: Vec<(PlanetIndex, &Planet)> = planets.iter()
                     .enumerate()
                     .map(|(i, p)| {
@@ -128,11 +127,12 @@ impl Space {
         let bugs = self.get_nearby_areas()
             .iter()
             .flat_map(|area| {
-                self.jumpers
+                &self.areas
                     .get(&area)
                     .expect(&format!("Uninitialized BUG area {:?} when in area {:?}",
                                      area,
                                      self.get_central_area()))
+                    .1
             })
             .collect();
         (planets, bugs)
@@ -141,7 +141,7 @@ impl Space {
     /// Look up a specific planet. This is safe only when using a PlanetIndex returned from *this
     /// instance's* get_nearby_planets method
     pub fn get_planet(&self, idx: PlanetIndex) -> &Planet {
-        &self.planets[&idx.area][idx.idx]
+        &self.areas[&idx.area].0[idx.idx]
     }
 
     fn get_nearby_areas(&self) -> Vec<(i32, i32)> {
@@ -171,14 +171,13 @@ impl Space {
     /// Generate planets around the current center point
     fn realize(&mut self) {
         for area in self.get_nearby_areas() {
-            if !self.planets.contains_key(&area) {
+            if !self.areas.contains_key(&area) {
                 let mut planets = Space::gen_planets();
                 for planet in planets.iter_mut() {
                     planet.pos.x += area.0 as f64 * AREA_WIDTH;
                     planet.pos.y += area.1 as f64 * AREA_HEIGHT;
                 }
-                // this check shoooould be unnecessary...
-                if !self.jumpers.contains_key(&area) {
+                let bugs = {
                     let planets_with_indices = planets.iter()
                         .enumerate()
                         .map(|(i, &ref p)| {
@@ -189,9 +188,10 @@ impl Space {
                              p)
                         })
                         .collect();
-                    self.jumpers.insert(area, Space::gen_bugs(&planets_with_indices));
-                }
-                self.planets.insert(area, planets);
+                    Space::gen_bugs(&planets_with_indices)
+                };
+
+                self.areas.insert(area, (planets, bugs));
             }
         }
     }
