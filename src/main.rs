@@ -229,96 +229,23 @@ impl App {
         // this next little bit of scope weirdness is brought to you by mutable borrows being
         // confusing
         let ship_pos = {
-            let attached_planet = self.space.get_planet(self.attached_planet);
-            let ship_pos = rotated_position(attached_planet.pos, self.rotation, self.height);
+            let ship_pos = {
+                let attached_planet = self.space.get_planet(self.attached_planet);
+                rotated_position(attached_planet.pos, self.rotation, self.height)
+            };
+
             if let Some(target) = input.shoot_target {
-                if self.fire_cooldown <= 0.0 {
-                    let angle = direction_from_to(ship_pos, target);
-                    let bullet = Bullet {
-                        pos: ship_pos,
-                        dir: angle,
-                        speed: BULLET_SPEED,
-                    };
-                    self.bullets.push(bullet);
-                    self.fire_cooldown = FIRE_COOLDOWN;
-                } else {
-                    self.fire_cooldown -= args.dt;
-                }
+                self.update_shoot(target, ship_pos, args.dt)
             }
 
-            let mut cull_bullets = vec![];
-            let mut cull_counter = 0;
-            for (idx, bullet) in self.bullets.iter_mut().enumerate() {
-                bullet.pos.x = bullet.pos.x + (bullet.speed * args.dt * bullet.dir.cos());
-                bullet.pos.y = bullet.pos.y + (bullet.speed * args.dt * bullet.dir.sin());
-                // kind of a dumb hack to determine when to cull bullets. It'd be better if we had
-                // the current view's bounding box (+ margin). or, alternatively, give each bullet
-                // a TTL.
-                if (bullet.pos.x - ship_pos.x).abs() > 5000.0 ||
-                   (bullet.pos.y - ship_pos.y).abs() > 5000.0 {
-                    // rejigger the index so when we delete the items they compensate for previous
-                    // deletions
-                    cull_bullets.push(idx - cull_counter);
-                    cull_counter += 1;
-                }
-            }
-
-            for cull_idx in cull_bullets {
-                self.bullets.remove(cull_idx);
-            }
-
-            if !self.flying {
-                if input.up {
-                    self.flying = true;
-                    self.exit_speed = FLY_SPEED;
-                }
-            } else {
-                self.height += self.exit_speed;
-                if input.down {
-                    self.exit_speed -= ACCELERATION * args.dt;
-                }
-                if input.up {
-                    self.exit_speed += ACCELERATION * args.dt;
-                }
-            }
-
-            if !self.jumping {
-                if input.jump {
-                    self.jumping = true;
-                    self.exit_speed = JUMP_SPEED;
-                }
-            } else {
-                self.exit_speed -= GRAVITY * args.dt;
-                self.height += self.exit_speed;
-                if !input.jump {
-                    if self.exit_speed > (JUMP_SPEED / 2.0) {
-                        self.exit_speed = JUMP_SPEED / 2.0;
-                    }
-                }
-            }
-
-            if self.flying || self.jumping {
-                if input.left {
-                    self.rotation -= SPEED * AIR_CONTROL_MOD * args.dt
-                }
-                if input.right {
-                    self.rotation += SPEED * AIR_CONTROL_MOD * args.dt
-                }
-            } else {
-                if input.left {
-                    self.rotation -= SPEED * args.dt;
-                }
-                if input.right {
-                    self.rotation += SPEED * args.dt;
-                }
-            }
+            self.update_cull_bullets(ship_pos, args.dt);
+            self.update_movement(input, args.dt);
 
             let ship_ball = Ball::new(SHIP_SIZE / 2.0);
             let na_ship_pos = Isometry2::new(Vector2::new(ship_pos.x, ship_pos.y), na::zero());
             let mut closest_planet_distance = self.height;
             let mut closest_planet_idx: PlanetIndex = self.attached_planet;
-            let mut closest_planet = attached_planet;
-
+            let mut closest_planet = self.space.get_planet(self.attached_planet);
             let planets = self.space.get_nearby_planets();
 
             for (planet_index, planet) in planets {
@@ -353,38 +280,150 @@ impl App {
                     .atan2(ship_pos.x - self.closest_planet_coords.x);
                 self.height = closest_planet_distance + closest_planet.radius + (SHIP_SIZE / 2.0);
             }
-
-            // Put a bound on rotation. This may be pointless...?
-            if self.rotation > PI {
-                self.rotation -= 2.0 * PI
-            }
-            if self.rotation < -PI {
-                self.rotation += 2.0 * PI
-            }
-
-
-            // Update the camera so that the ship stays in view with a margin around the screen.
-            let x_margin = (1.0 / 4.0) * view_size.width as f64;
-            let y_margin = (1.0 / 4.0) * view_size.height as f64;
-            let view_width_with_margin = view_size.width as f64 * (3.0 / 4.0);
-            let view_height_with_margin = view_size.height as f64 * (3.0 / 4.0);
-
-            if ship_pos.x > self.camera_pos.x + view_width_with_margin {
-                self.camera_pos.x += ship_pos.x - (self.camera_pos.x + view_width_with_margin);
-            } else if ship_pos.x < self.camera_pos.x + x_margin {
-                self.camera_pos.x += ship_pos.x - self.camera_pos.x - x_margin;
-            }
-            if ship_pos.y > self.camera_pos.y + view_height_with_margin {
-                self.camera_pos.y += ship_pos.y - (self.camera_pos.y + view_height_with_margin);
-            } else if ship_pos.y < self.camera_pos.y + y_margin {
-                self.camera_pos.y += ship_pos.y - self.camera_pos.y - y_margin;
-            }
             ship_pos
         };
-        for crawler in self.space.get_nearby_bugs_mut() {
-            crawler.rotation -= CRAWLER_SPEED * args.dt;
+
+        // Put a bound on rotation. This may be pointless...?
+        if self.rotation > PI {
+            self.rotation -= 2.0 * PI
         }
+        if self.rotation < -PI {
+            self.rotation += 2.0 * PI
+        }
+        self.camera_pos = self.update_camera(view_size, ship_pos);
+
+        self.update_bugs(args.dt);
         self.space.focus(ship_pos);
+    }
+
+    fn update_shoot(&mut self, target: Point, ship_pos: Point, time_delta: f64) {
+        if self.fire_cooldown <= 0.0 {
+            let angle = direction_from_to(ship_pos, target);
+            let bullet = Bullet {
+                pos: ship_pos,
+                dir: angle,
+                speed: BULLET_SPEED,
+            };
+            self.bullets.push(bullet);
+            self.fire_cooldown = FIRE_COOLDOWN;
+        } else {
+            self.fire_cooldown -= time_delta;
+        }
+    }
+
+    fn update_cull_bullets(&mut self, ship_pos: Point, time_delta: f64) {
+        let mut cull_bullets = vec![];
+        let mut cull_counter = 0;
+        for (idx, bullet) in self.bullets.iter_mut().enumerate() {
+            bullet.pos.x = bullet.pos.x + (bullet.speed * time_delta * bullet.dir.cos());
+            bullet.pos.y = bullet.pos.y + (bullet.speed * time_delta * bullet.dir.sin());
+            // kind of a dumb hack to determine when to cull bullets. It'd be better if we had
+            // the current view's bounding box (+ margin). or, alternatively, give each bullet
+            // a TTL.
+            if (bullet.pos.x - ship_pos.x).abs() > 5000.0 ||
+               (bullet.pos.y - ship_pos.y).abs() > 5000.0 {
+                // rejigger the index so when we delete the items they compensate for previous
+                // deletions
+                cull_bullets.push(idx - cull_counter);
+                cull_counter += 1;
+            }
+        }
+        for cull_idx in cull_bullets {
+            self.bullets.remove(cull_idx);
+        }
+    }
+
+    fn update_movement(&mut self, input: &GameInput, time_delta: f64) {
+        if !self.flying {
+            if input.up {
+                self.flying = true;
+                self.exit_speed = FLY_SPEED;
+            }
+        } else {
+            self.height += self.exit_speed;
+            if input.down {
+                self.exit_speed -= ACCELERATION * time_delta;
+            }
+            if input.up {
+                self.exit_speed += ACCELERATION * time_delta;
+            }
+        }
+
+        if !self.jumping {
+            if input.jump {
+                self.jumping = true;
+                self.exit_speed = JUMP_SPEED;
+            }
+        } else {
+            self.exit_speed -= GRAVITY * time_delta;
+            self.height += self.exit_speed;
+            if !input.jump {
+                if self.exit_speed > (JUMP_SPEED / 2.0) {
+                    self.exit_speed = JUMP_SPEED / 2.0;
+                }
+            }
+        }
+
+        if self.flying || self.jumping {
+            if input.left {
+                self.rotation -= SPEED * AIR_CONTROL_MOD * time_delta
+            }
+            if input.right {
+                self.rotation += SPEED * AIR_CONTROL_MOD * time_delta
+            }
+        } else {
+            if input.left {
+                self.rotation -= SPEED * time_delta;
+            }
+            if input.right {
+                self.rotation += SPEED * time_delta;
+            }
+        }
+    }
+    fn update_camera(&self, view_size: piston_window::Size, ship_pos: Point) -> Point {
+        // Update the camera so that the ship stays in view with a margin around the screen.
+        let x_margin = (1.0 / 4.0) * view_size.width as f64;
+        let y_margin = (1.0 / 4.0) * view_size.height as f64;
+        let view_width_with_margin = view_size.width as f64 * (3.0 / 4.0);
+        let view_height_with_margin = view_size.height as f64 * (3.0 / 4.0);
+
+        let x = if ship_pos.x > self.camera_pos.x + view_width_with_margin {
+            self.camera_pos.x + ship_pos.x - (self.camera_pos.x + view_width_with_margin)
+        } else if ship_pos.x < self.camera_pos.x + x_margin {
+            self.camera_pos.x + ship_pos.x - self.camera_pos.x - x_margin
+        } else {
+            self.camera_pos.x
+        };
+        let y = if ship_pos.y > self.camera_pos.y + view_height_with_margin {
+            self.camera_pos.y + ship_pos.y - (self.camera_pos.y + view_height_with_margin)
+        } else if ship_pos.y < self.camera_pos.y + y_margin {
+            self.camera_pos.y + ship_pos.y - self.camera_pos.y - y_margin
+        } else {
+            self.camera_pos.y
+        };
+        pt(x, y)
+    }
+
+    fn update_bugs(&mut self, time_delta: f64) {
+        let bball = Ball::new(BULLET_SIZE);
+        let crawler_ball = Ball::new(CRAWLER_SIZE);
+        for crawler in self.space.get_nearby_bugs_mut() {
+            crawler.rotation -= CRAWLER_SPEED * time_delta;
+        }
+        for crawler in self.space.get_nearby_bugs() {
+            let planet = self.space.get_planet(crawler.attached);
+            let bug_pos =
+                rotated_position(planet.pos, crawler.rotation, planet.radius + CRAWLER_SIZE);
+            let crawler_pos = Isometry2::new(Vector2::new(bug_pos.x, bug_pos.y), na::zero());
+
+            for bullet in self.bullets.iter() {
+                let bpos = Isometry2::new(Vector2::new(bullet.pos.x, bullet.pos.y), na::zero());
+                let collided = query::contact(&crawler_pos, &crawler_ball, &bpos, &bball, 0.0);
+                if let Some(_) = collided {
+                    println!("OH SNAP!");
+                }
+            }
+        }
     }
 }
 

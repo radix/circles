@@ -51,17 +51,17 @@ pub struct PlanetIndex {
     // Space::get_nearby_planets. However, it's only marginal since the user could have multiple
     // Space instances, and cause panics by passing one space's PlanetIndex objects to a different
     // space. Need dependent types.
-    area: (i32, i32),
+    area: Area,
     idx: usize,
 }
 
 impl PlanetIndex {
-    pub fn get_area(&self) -> (i32, i32) {
+    pub fn get_area(&self) -> Area {
         self.area
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct CrawlerBug {
     pub attached: PlanetIndex,
     pub rotation: f64,
@@ -167,13 +167,21 @@ impl Space {
         buggies
     }
 
+    fn delete_bug(&mut self, idx: PlanetIndex, bug: CrawlerBug) {
+        // this is a dumb way to do this but WHATEVZ, GET IT DONE
+        let ref mut bugs = self.areas.get_mut(&idx.area).unwrap().1;
+        if let Some(pos) = bugs.iter().position(|e| e.eq(&bug)) {
+            bugs.remove(pos);
+        }
+    }
+
     /// Look up a specific planet. This is safe only when using a PlanetIndex returned from *this
     /// instance's* get_nearby_planets method
     pub fn get_planet(&self, idx: PlanetIndex) -> &Planet {
         &self.areas[&idx.area].0[idx.idx]
     }
 
-    fn get_nearby_areas(&self) -> Vec<(i32, i32)> {
+    fn get_nearby_areas(&self) -> Vec<Area> {
         let area = self.get_central_area();
         let (x, y) = (area.0, area.1);
         vec![(x - 1, y - 1),
@@ -187,13 +195,13 @@ impl Space {
              (x + 1, y + 1)]
     }
 
-    fn get_area(p: Point) -> (i32, i32) {
+    fn get_area(p: Point) -> Area {
         let x = p.x / AREA_WIDTH;
         let y = p.y / AREA_HEIGHT;
         (x.floor() as i32, y.floor() as i32)
     }
 
-    pub fn get_central_area(&self) -> (i32, i32) {
+    pub fn get_central_area(&self) -> Area {
         Space::get_area(self.current_point)
     }
 
