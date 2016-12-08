@@ -167,10 +167,10 @@ impl Space {
         buggies
     }
 
-    fn delete_bug(&mut self, idx: PlanetIndex, bug: CrawlerBug) {
+    pub fn delete_bug(&mut self, idx: PlanetIndex) {
         // this is a dumb way to do this but WHATEVZ, GET IT DONE
         let ref mut bugs = self.areas.get_mut(&idx.area).unwrap().1;
-        if let Some(pos) = bugs.iter().position(|e| e.eq(&bug)) {
+        if let Some(pos) = bugs.iter().position(|bug| bug.attached.eq(&idx)) {
             bugs.remove(pos);
         }
     }

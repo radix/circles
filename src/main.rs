@@ -405,25 +405,33 @@ impl App {
     }
 
     fn update_bugs(&mut self, time_delta: f64) {
-        let bball = Ball::new(BULLET_SIZE);
-        let crawler_ball = Ball::new(CRAWLER_SIZE);
-        for crawler in self.space.get_nearby_bugs_mut() {
-            crawler.rotation -= CRAWLER_SPEED * time_delta;
-        }
-        for crawler in self.space.get_nearby_bugs() {
-            let planet = self.space.get_planet(crawler.attached);
-            let bug_pos =
-                rotated_position(planet.pos, crawler.rotation, planet.radius + CRAWLER_SIZE);
-            let crawler_pos = Isometry2::new(Vector2::new(bug_pos.x, bug_pos.y), na::zero());
+        let shot_crawlers = {
+            let bball = Ball::new(BULLET_SIZE);
+            let crawler_ball = Ball::new(CRAWLER_SIZE);
+            for crawler in self.space.get_nearby_bugs_mut() {
+                crawler.rotation -= CRAWLER_SPEED * time_delta;
+            }
+            let mut shot_crawlers = vec![];
+            for crawler in self.space.get_nearby_bugs() {
+                let planet = self.space.get_planet(crawler.attached);
+                let bug_pos =
+                    rotated_position(planet.pos, crawler.rotation, planet.radius + CRAWLER_SIZE);
+                let crawler_pos = Isometry2::new(Vector2::new(bug_pos.x, bug_pos.y), na::zero());
 
-            for bullet in self.bullets.iter() {
-                let bpos = Isometry2::new(Vector2::new(bullet.pos.x, bullet.pos.y), na::zero());
-                let collided = query::contact(&crawler_pos, &crawler_ball, &bpos, &bball, 0.0);
-                if let Some(_) = collided {
-                    println!("OH SNAP!");
+                for bullet in self.bullets.iter() {
+                    let bpos = Isometry2::new(Vector2::new(bullet.pos.x, bullet.pos.y), na::zero());
+                    let collided = query::contact(&crawler_pos, &crawler_ball, &bpos, &bball, 0.0);
+                    if let Some(_) = collided {
+                        shot_crawlers.push(crawler.attached);
+                    }
                 }
             }
+            shot_crawlers
+        };
+        for p in shot_crawlers {
+            self.space.delete_bug(p);
         }
+
     }
 }
 
