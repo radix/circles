@@ -2,6 +2,7 @@ extern crate rand;
 
 use std::collections::HashMap;
 use std::fmt;
+use std::f64::consts::PI;
 
 use self::rand::distributions::{IndependentSample, Range};
 
@@ -256,6 +257,7 @@ impl Space {
 
     fn gen_bugs(planets: &Vec<(PlanetIndex, &Planet)>) -> Vec<CrawlerBug> {
         let range_bool = Range::new(0, 2);
+        let range_rot = Range::new(-2.0 * PI, 2.0 * PI);
         let mut rng = rand::thread_rng();
         let bugs = planets.iter()
             .filter_map(|&(pidx, _)| {
@@ -264,7 +266,7 @@ impl Space {
                 if rando == 1 {
                     Some(CrawlerBug {
                         attached: pidx,
-                        rotation: 0.0,
+                        rotation: range_rot.ind_sample(&mut rng),
                     })
                 } else {
                     None
