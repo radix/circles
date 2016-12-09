@@ -4,6 +4,8 @@ use std::collections::HashMap;
 use std::fmt;
 use std::f64::consts::PI;
 
+use std::sync::atomic::{AtomicUsize, Ordering, ATOMIC_USIZE_INIT};
+
 use self::rand::distributions::{IndependentSample, Range};
 
 const AREA_WIDTH: f64 = 2560.0;
@@ -76,7 +78,7 @@ type Area = (i32, i32);
 #[derive(Debug)]
 pub struct Space {
     // Keep this private!
-    areas: HashMap<Area, (Vec<Planet>, Vec<CrawlerBug>)>,
+    areas: HashMap<Area, (Vec<Planet>, HashMap<usize, CrawlerBug>)>,
     current_point: Point,
 }
 
@@ -125,55 +127,34 @@ impl Space {
             .collect()
     }
 
-    pub fn get_nearby_bugs(&self) -> Vec<&CrawlerBug> {
+    pub fn get_nearby_bugs(&self) -> Vec<(Area, usize)> {
         self.get_nearby_areas()
             .iter()
             .flat_map(|area| {
-                &self.areas
+                let x: Vec<(Area, usize)> = self.areas
                     .get(&area)
-                    .expect(&format!("Uninitialized BUG area {:?} when in area {:?}",
-                                     area,
-                                     self.get_central_area()))
+                    .unwrap()
                     .1
+                    .keys()
+                    .map(|i| (area.clone(), i.clone()))
+                    .collect();
+                x
             })
             .collect()
     }
 
-    pub fn get_nearby_bugs_mut(&mut self) -> Vec<&mut CrawlerBug> {
-        let nearby_areas = self.get_nearby_areas();
-        let mut buggies = vec![];
-        // okay, so long story.
-
-        // Context: This function wants to return multiple mutable references in a Vec -- meaning,
-        // they will live at the same time. Normally, rust will not allow multiple mutable
-        // references into the same value, even if they are "disjoint" -- that is, non-overlapping
-        // in memory. That means that if I try to call HashMap::get_mut a bunch of times and save
-        // away all of those mutable references, rustc will barf because it can't prove I didn't
-        // pass the same key to get_mut multiple times (meaning the same &mut value would be
-        // returned multiple times, which would actually be unsafe).
-
-        // However, HashMap and other built-in datatypes have a trick up their sleeves: .iter_mut()
-        // apparently does some unsafe magic to hand out mutable references that can live at the
-        // same time. The reasoning why this is safe is simple: since it's iterating over all the
-        // values only once, it can be sure that it's only handing out one &mut per value -- that
-        // is, all returned references are disjoint.
-
-        // Of course, this means that we have to walk the entire hashmap, when we really just need
-        // access to a few keys, so this is not a scalable solution.
-        for (k, &mut (_, ref mut v)) in self.areas.iter_mut() {
-            if nearby_areas.contains(k) {
-                buggies.extend(v);
-            }
-        }
-        buggies
+    /// Get a bug. Only safe when using Area and usize as returned from get_nearby_bugs.
+    pub fn get_bug(&self, area: Area, idx: usize) -> &CrawlerBug {
+        self.areas[&area].1.get(&idx).unwrap()
     }
-
-    pub fn delete_bug(&mut self, idx: PlanetIndex) {
-        // this is a dumb way to do this but WHATEVZ, GET IT DONE
-        let ref mut bugs = self.areas.get_mut(&idx.area).unwrap().1;
-        if let Some(pos) = bugs.iter().position(|bug| bug.attached.eq(&idx)) {
-            bugs.remove(pos);
-        }
+    /// Get a mutable bug. Only safe when using Area and usize as returned from get_nearby_bugs.
+    pub fn get_bug_mut(&mut self, area: Area, idx: usize) -> &mut CrawlerBug {
+        self.areas.get_mut(&area).unwrap().1.get_mut(&idx).unwrap()
+    }
+    /// Delete a bug. Only safe when using Area and usize as returned from get_nearby_bugs.
+    pub fn delete_bug(&mut self, area: Area, idx: usize) {
+        let ref mut bugs = self.areas.get_mut(&area).unwrap().1;
+        bugs.remove(&idx);
     }
 
     /// Look up a specific planet. This is safe only when using a PlanetIndex returned from *this
@@ -208,6 +189,9 @@ impl Space {
 
     /// Generate planets around the current center point
     fn realize(&mut self) {
+        // use an absolute bug count to index bugs so that we can safely delete them even while
+        // looping over them.
+        static BUG_COUNT: AtomicUsize = ATOMIC_USIZE_INIT;
         for area in self.get_nearby_areas() {
             if !self.areas.contains_key(&area) {
                 let mut planets = Space::gen_planets();
@@ -227,6 +211,9 @@ impl Space {
                         })
                         .collect();
                     Space::gen_bugs(&planets_with_indices)
+                        .into_iter()
+                        .map(|b| (BUG_COUNT.fetch_add(1, Ordering::SeqCst), b))
+                        .collect()
                 };
 
                 self.areas.insert(area, (planets, bugs));

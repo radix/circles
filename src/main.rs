@@ -183,7 +183,8 @@ impl App {
                         g);
             }
 
-            for bug in bugs {
+            for (area, idx) in bugs {
+                let bug = self.space.get_bug(area, idx);
                 let planet = self.space.get_planet(bug.attached);
                 let bug_pos =
                     rotated_position(planet.pos, bug.rotation, planet.radius + CRAWLER_SIZE);
@@ -380,6 +381,7 @@ impl App {
             }
         }
     }
+
     fn update_camera(&self, view_size: piston_window::Size, ship_pos: Point) -> Point {
         // Update the camera so that the ship stays in view with a margin around the screen.
         let x_margin = (1.0 / 4.0) * view_size.width as f64;
@@ -405,33 +407,25 @@ impl App {
     }
 
     fn update_bugs(&mut self, time_delta: f64) {
-        let shot_crawlers = {
-            let bball = Ball::new(BULLET_SIZE);
-            let crawler_ball = Ball::new(CRAWLER_SIZE);
-            for crawler in self.space.get_nearby_bugs_mut() {
-                crawler.rotation -= CRAWLER_SPEED * time_delta;
-            }
-            let mut shot_crawlers = vec![];
-            for crawler in self.space.get_nearby_bugs() {
+        let bball = Ball::new(BULLET_SIZE);
+        let crawler_ball = Ball::new(CRAWLER_SIZE);
+        for (area, crawler_idx) in self.space.get_nearby_bugs() {
+            self.space.get_bug_mut(area, crawler_idx).rotation -= CRAWLER_SPEED * time_delta;
+            let crawler_pos = {
+                let crawler = self.space.get_bug(area, crawler_idx);
                 let planet = self.space.get_planet(crawler.attached);
                 let bug_pos =
                     rotated_position(planet.pos, crawler.rotation, planet.radius + CRAWLER_SIZE);
-                let crawler_pos = Isometry2::new(Vector2::new(bug_pos.x, bug_pos.y), na::zero());
-
-                for bullet in self.bullets.iter() {
-                    let bpos = Isometry2::new(Vector2::new(bullet.pos.x, bullet.pos.y), na::zero());
-                    let collided = query::contact(&crawler_pos, &crawler_ball, &bpos, &bball, 0.0);
-                    if let Some(_) = collided {
-                        shot_crawlers.push(crawler.attached);
-                    }
+                Isometry2::new(Vector2::new(bug_pos.x, bug_pos.y), na::zero())
+            };
+            for bullet in self.bullets.iter() {
+                let bpos = Isometry2::new(Vector2::new(bullet.pos.x, bullet.pos.y), na::zero());
+                let collided = query::contact(&crawler_pos, &crawler_ball, &bpos, &bball, 0.0);
+                if let Some(_) = collided {
+                    self.space.delete_bug(area, crawler_idx);
                 }
             }
-            shot_crawlers
-        };
-        for p in shot_crawlers {
-            self.space.delete_bug(p);
         }
-
     }
 }
 
