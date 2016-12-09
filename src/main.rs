@@ -116,6 +116,10 @@ fn rotated_position(origin: Point, rotation: f64, height: f64) -> Point {
        origin.y + (rotation.sin() * height))
 }
 
+fn lerp(a: f64, b: f64, t: f64) -> f64 {
+    a + t * (b - a)
+}
+
 impl App {
     fn debug(&self,
              g: &mut G2d,
@@ -205,6 +209,7 @@ impl App {
             line(GREEN, 1.0, nearest_beam, camera, g);
 
             {
+                // Draw the hint line
                 let direction = direction_from_to(ship_pos, self.magic_planet);
                 let cardinal = quad_direction(direction);
                 let width = view_size.width as f64;
@@ -217,9 +222,12 @@ impl App {
                 };
                 line(RED, 5.0, hint_line, c.transform, g);
             }
-            let attached = &self.space.get_planet(self.attached_planet);
-            let attached_beam = [ship_pos.x, ship_pos.y, attached.pos.x, attached.pos.y];
-            line(BLUE, 1.0, attached_beam, camera, g);
+            {
+                // Draw the attached beam
+                let attached = &self.space.get_planet(self.attached_planet);
+                let attached_beam = [ship_pos.x, ship_pos.y, attached.pos.x, attached.pos.y];
+                line(BLUE, 1.0, attached_beam, camera, g);
+            }
         });
     }
 
@@ -250,7 +258,7 @@ impl App {
         if self.rotation < -PI {
             self.rotation += 2.0 * PI
         }
-        self.camera_pos = self.update_camera(view_size, ship_pos);
+        self.camera_pos = self.update_camera(view_size, self.camera_pos, ship_pos);
 
         self.update_bugs(args.dt);
         self.space.focus(ship_pos);
@@ -374,6 +382,7 @@ impl App {
         (closest_planet_idx, closest_planet_distance)
     }
 
+    /// Handle use of the "attach" ability
     fn update_attach(&mut self,
                      closest_planet_idx: PlanetIndex,
                      closest_planet_distance: f64,
@@ -391,13 +400,18 @@ impl App {
 
     }
 
-    fn update_camera(&self, view_size: piston_window::Size, ship_pos: Point) -> Point {
-        // Update the camera so that the ship stays in view with a margin around the screen.
-        let x_margin = (1.0 / 4.0) * view_size.width as f64;
-        let y_margin = (1.0 / 4.0) * view_size.height as f64;
-        let view_width_with_margin = view_size.width as f64 * (3.0 / 4.0);
-        let view_height_with_margin = view_size.height as f64 * (3.0 / 4.0);
+    // Update the camera so that the ship stays in view with a margin around the screen.
+    fn update_camera(&self,
+                     view_size: piston_window::Size,
+                     camera_pos: Point,
+                     ship_pos: Point)
+                     -> Point {
+        let x_margin = (1.0 / 3.0) * view_size.width as f64;
+        let y_margin = (1.0 / 3.0) * view_size.height as f64;
+        let view_width_with_margin = view_size.width as f64 * (2.0 / 3.0);
+        let view_height_with_margin = view_size.height as f64 * (2.0 / 3.0);
 
+        // this seems like it's way more complicated than it should be
         let x = if ship_pos.x > self.camera_pos.x + view_width_with_margin {
             self.camera_pos.x + ship_pos.x - (self.camera_pos.x + view_width_with_margin)
         } else if ship_pos.x < self.camera_pos.x + x_margin {
@@ -412,7 +426,8 @@ impl App {
         } else {
             self.camera_pos.y
         };
-        pt(x, y)
+        // pt((camera_pos.x + x) / 2.0, (camera_pos.y + y) / 2.0)
+        pt(lerp(camera_pos.x, x, 0.1), lerp(camera_pos.y, y, 0.1))
     }
 
     fn update_bugs(&mut self, time_delta: f64) {
