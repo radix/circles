@@ -227,62 +227,20 @@ impl App {
         if input.toggle_debug {
             self.debug = !self.debug;
         }
-        // this next little bit of scope weirdness is brought to you by mutable borrows being
-        // confusing
         let ship_pos = {
-            let ship_pos = {
-                let attached_planet = self.space.get_planet(self.attached_planet);
-                rotated_position(attached_planet.pos, self.rotation, self.height)
-            };
-
+            let attached_planet = self.space.get_planet(self.attached_planet);
+            rotated_position(attached_planet.pos, self.rotation, self.height)
+        };
+        {
             if let Some(target) = input.shoot_target {
                 self.update_shoot(target, ship_pos, args.dt)
             }
 
             self.update_cull_bullets(ship_pos, args.dt);
             self.update_movement(input, args.dt);
-
-            let ship_ball = Ball::new(SHIP_SIZE / 2.0);
-            let na_ship_pos = Isometry2::new(Vector2::new(ship_pos.x, ship_pos.y), na::zero());
-            let mut closest_planet_distance = self.height;
-            let mut closest_planet_idx: PlanetIndex = self.attached_planet;
-            let mut closest_planet = self.space.get_planet(self.attached_planet);
-            let planets = self.space.get_nearby_planets();
-
-            for (planet_index, planet) in planets {
-                let planet_ball = Ball::new(planet.radius);
-                let planet_pos = Isometry2::new(Vector2::new(planet.pos.x, planet.pos.y),
-                                                na::zero());
-
-                // Check if this is the closest planet
-                let distance = query::distance(&na_ship_pos, &ship_ball, &planet_pos, &planet_ball);
-                if distance < closest_planet_distance {
-                    closest_planet_distance = distance;
-                    closest_planet_idx = planet_index;
-                    closest_planet = planet;
-                    self.closest_planet_coords = pt(planet.pos.x, planet.pos.y);
-                }
-                let collided =
-                    query::contact(&na_ship_pos, &ship_ball, &planet_pos, &planet_ball, -1.0);
-                if let Some(_) = collided {
-                    // We are landing on a new planet
-                    self.attached_planet = planet_index;
-                    self.flying = false;
-                    self.jumping = false;
-                    self.height = planet.radius + (SHIP_SIZE / 2.0);
-                    self.rotation = direction_from_to(planet.pos, ship_pos);
-                    self.exit_speed = 0.0;
-                }
-            }
-            if input.attach && closest_planet_idx != self.attached_planet {
-                self.attached_planet = closest_planet_idx;
-                self.exit_speed = 0.0;
-                self.rotation = (ship_pos.y - self.closest_planet_coords.y)
-                    .atan2(ship_pos.x - self.closest_planet_coords.x);
-                self.height = closest_planet_distance + closest_planet.radius + (SHIP_SIZE / 2.0);
-            }
-            ship_pos
-        };
+            let (closest_planet_idx, closest_planet_distance) = self.update_collision(ship_pos);
+            self.update_attach(closest_planet_idx, closest_planet_distance, ship_pos, input);
+        }
 
         // Put a bound on rotation. This may be pointless...?
         if self.rotation > PI {
@@ -380,6 +338,56 @@ impl App {
                 self.rotation += SPEED * time_delta;
             }
         }
+    }
+
+    fn update_collision(&mut self, ship_pos: Point) -> (PlanetIndex, f64) {
+        let ship_ball = Ball::new(SHIP_SIZE / 2.0);
+        let na_ship_pos = Isometry2::new(Vector2::new(ship_pos.x, ship_pos.y), na::zero());
+        let mut closest_planet_distance = self.height;
+        let mut closest_planet_idx: PlanetIndex = self.attached_planet;
+        let planets = self.space.get_nearby_planets();
+
+        for (planet_index, planet) in planets {
+            let planet_ball = Ball::new(planet.radius);
+            let planet_pos = Isometry2::new(Vector2::new(planet.pos.x, planet.pos.y), na::zero());
+
+            // Check if this is the closest planet
+            let distance = query::distance(&na_ship_pos, &ship_ball, &planet_pos, &planet_ball);
+            if distance < closest_planet_distance {
+                closest_planet_distance = distance;
+                closest_planet_idx = planet_index;
+                self.closest_planet_coords = pt(planet.pos.x, planet.pos.y);
+            }
+            let collided =
+                query::contact(&na_ship_pos, &ship_ball, &planet_pos, &planet_ball, -1.0);
+            if let Some(_) = collided {
+                // We are landing on a new planet
+                self.attached_planet = planet_index;
+                self.flying = false;
+                self.jumping = false;
+                self.height = planet.radius + (SHIP_SIZE / 2.0);
+                self.rotation = direction_from_to(planet.pos, ship_pos);
+                self.exit_speed = 0.0;
+            }
+        }
+        (closest_planet_idx, closest_planet_distance)
+    }
+
+    fn update_attach(&mut self,
+                     closest_planet_idx: PlanetIndex,
+                     closest_planet_distance: f64,
+                     ship_pos: Point,
+                     input: &GameInput) {
+        if input.attach && closest_planet_idx != self.attached_planet {
+            self.attached_planet = closest_planet_idx;
+            self.exit_speed = 0.0;
+            self.rotation = (ship_pos.y - self.closest_planet_coords.y)
+                .atan2(ship_pos.x - self.closest_planet_coords.x);
+            self.height = closest_planet_distance +
+                          self.space.get_planet(closest_planet_idx).radius +
+                          (SHIP_SIZE / 2.0);
+        }
+
     }
 
     fn update_camera(&self, view_size: piston_window::Size, ship_pos: Point) -> Point {
