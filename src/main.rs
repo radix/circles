@@ -231,16 +231,17 @@ impl App {
             let attached_planet = self.space.get_planet(self.attached_planet);
             rotated_position(attached_planet.pos, self.rotation, self.height)
         };
-        {
-            if let Some(target) = input.shoot_target {
-                self.update_shoot(target, ship_pos, args.dt)
-            }
 
-            self.update_cull_bullets(ship_pos, args.dt);
-            self.update_movement(input, args.dt);
-            let (closest_planet_idx, closest_planet_distance) = self.update_collision(ship_pos);
-            self.update_attach(closest_planet_idx, closest_planet_distance, ship_pos, input);
+        // It would be nice if more of these methods took &self instead of &mut self, and we
+        // assigned the results
+        if let Some(target) = input.shoot_target {
+            self.update_shoot(target, ship_pos, args.dt)
         }
+
+        self.update_cull_bullets(ship_pos, args.dt);
+        self.update_movement(input, args.dt);
+        let (closest_planet_idx, closest_planet_distance) = self.update_collision(ship_pos);
+        self.update_attach(closest_planet_idx, closest_planet_distance, ship_pos, input);
 
         // Put a bound on rotation. This may be pointless...?
         if self.rotation > PI {
