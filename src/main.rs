@@ -466,7 +466,7 @@ fn main() {
         height: space.get_planet(attached_planet_idx).radius,
         rotation: 0.0,
         attached_planet: attached_planet_idx,
-        closest_planet_coords: pt(500.0, 500.0),
+        closest_planet_coords: space.get_planet(attached_planet_idx).pos,
         bullets: vec![],
         space: Space::new(),
         magic_planet: pt(500.0, 500.0),

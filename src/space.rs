@@ -83,7 +83,7 @@ pub struct Space {
 }
 
 impl Space {
-    pub fn new() -> Space {
+    pub fn new() -> Self {
         let mut sp = Space {
             areas: HashMap::new(),
             current_point: pt(0.0, 0.0),
@@ -101,18 +101,18 @@ impl Space {
         return self.current_point;
     }
 
-    /// Return all nearby planets and bugs.
+    /// Return all nearby planets
     pub fn get_nearby_planets(&self) -> Vec<(PlanetIndex, &Planet)> {
         self.get_nearby_areas()
             .iter()
-            .flat_map(|area| {
+            .flat_map::<Vec<(PlanetIndex, &Planet)>, _>(|area| {
                 let ref planets = self.areas
                     .get(&area)
                     .expect(&format!("Uninitialized PLANET area {:?} when in area {:?}",
                                      area,
                                      self.get_central_area()))
                     .0;
-                let planets: Vec<(PlanetIndex, &Planet)> = planets.iter()
+                planets.iter()
                     .enumerate()
                     .map(|(i, p)| {
                         (PlanetIndex {
@@ -121,24 +121,24 @@ impl Space {
                          },
                          p)
                     })
-                    .collect();
-                planets
+                    .collect()
+
             })
             .collect()
     }
 
+    // Return indices of nearby CrawlerBugs.
     pub fn get_nearby_bugs(&self) -> Vec<(Area, usize)> {
         self.get_nearby_areas()
             .iter()
-            .flat_map(|area| {
-                let x: Vec<(Area, usize)> = self.areas
+            .flat_map::<Vec<(Area, usize)>, _>(|area| {
+                self.areas
                     .get(&area)
                     .unwrap()
                     .1
                     .keys()
                     .map(|i| (area.clone(), i.clone()))
-                    .collect();
-                x
+                    .collect()
             })
             .collect()
     }
