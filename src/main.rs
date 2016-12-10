@@ -2,6 +2,7 @@ extern crate piston_window;
 extern crate ncollide;
 extern crate nalgebra as na;
 extern crate find_folder;
+extern crate fps_counter;
 
 use std::f64::consts::PI;
 use piston_window::*;
@@ -25,6 +26,7 @@ const BULLET_SIZE: f64 = 5.0;
 const ACCELERATION: f64 = 5.0;
 const FIRE_COOLDOWN: f64 = 0.1;
 const GRAVITY: f64 = 50.0;
+const MAGIC_PLANET_SIZE: f64 = 200.0;
 
 struct GameInput {
     toggle_debug: bool,
@@ -95,7 +97,6 @@ const BLUE: [f32; 4] = [0.0, 0.0, 1.0, 1.0];
 const BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
 const WHITE: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
 
-
 fn rotated_position(origin: Point, rotation: f64, height: f64) -> Point {
     pt(origin.x + (rotation.cos() * height),
        origin.y + (rotation.sin() * height))
@@ -103,6 +104,10 @@ fn rotated_position(origin: Point, rotation: f64, height: f64) -> Point {
 
 fn lerp(a: f64, b: f64, t: f64) -> f64 {
     a + t * (b - a)
+}
+
+fn coll_pt(point: Point) -> Isometry2<f64> {
+    Isometry2::new(Vector2::new(point.x, point.y), na::zero())
 }
 
 impl App {
@@ -118,14 +123,19 @@ impl App {
         }
     }
 
-    fn render(&self, mut window: &mut PistonWindow, event: &Event, glyphs: &mut Glyphs) {
+    fn render(&self,
+              mut window: &mut PistonWindow,
+              event: &Event,
+              glyphs: &mut Glyphs,
+              fps_counter: &mut fps_counter::FPSCounter) {
+
         let view_size = window.size();
-        let ship_pos = self.space.get_focus();
-        let planets = self.space.get_nearby_planets();
-        let bugs = self.space.get_nearby_bugs();
-        let bullet_gfx = ellipse::circle(0.0, 0.0, BULLET_SIZE);
 
         window.draw_2d(event, |c, g| {
+            let ship_pos = self.space.get_focus();
+            let planets = self.space.get_nearby_planets();
+            let bugs = self.space.get_nearby_bugs();
+            let bullet_gfx = rectangle::square(-BULLET_SIZE / 2.0, -BULLET_SIZE / 2.0, BULLET_SIZE);
             let camera = c.transform.trans(-self.camera_pos.x, -self.camera_pos.y);
             clear(BLACK, g);
 
@@ -133,6 +143,10 @@ impl App {
             self.render_planets(glyphs, planets, camera, &c, g, view_size);
             self.render_bugs(bugs, camera, g, view_size);
             self.render_bullets(bullet_gfx, camera, g, view_size);
+            let fps = fps_counter.tick();
+            if self.debug {
+                self.render_fps(glyphs, fps, &c, g);
+            }
 
             let nearest_beam = [ship_pos.x,
                                 ship_pos.y,
@@ -147,6 +161,15 @@ impl App {
             line(BLUE, 1.0, attached_beam, camera, g);
         });
     }
+
+    fn render_fps(&self, glyphs: &mut Glyphs, fps: usize, context: &Context, g: &mut G2d) {
+        text::Text::new_color(WHITE, 20).draw(&format!("FPS: {}", fps),
+                                              glyphs,
+                                              &context.draw_state,
+                                              context.transform.trans(100.0, 100.0),
+                                              g);
+    }
+
     fn render_ship(&self,
                    glyphs: &mut Glyphs,
                    ship_pos: Point,
@@ -196,8 +219,11 @@ impl App {
                                     planet.radius));
             }
         }
-        if circle_in_view(self.magic_planet, 100.0, self.camera_pos, view_size) {
-            let planet_gfx = ellipse::circle(0.0, 0.0, 100.0);
+        if circle_in_view(self.magic_planet,
+                          MAGIC_PLANET_SIZE,
+                          self.camera_pos,
+                          view_size) {
+            let planet_gfx = ellipse::circle(0.0, 0.0, MAGIC_PLANET_SIZE);
             ellipse(RED,
                     planet_gfx,
                     camera.trans(self.magic_planet.x, self.magic_planet.y),
@@ -228,7 +254,7 @@ impl App {
                       view_size: Size) {
         for bullet in self.bullets.iter() {
             if circle_in_view(bullet.pos, BULLET_SIZE, self.camera_pos, view_size) {
-                ellipse(RED, bullet_gfx, camera.trans(bullet.pos.x, bullet.pos.y), g);
+                rectangle(RED, bullet_gfx, camera.trans(bullet.pos.x, bullet.pos.y), g);
             }
         }
     }
@@ -242,12 +268,12 @@ impl App {
 
         let magic_dir = direction_from_to(ship_pos, self.magic_planet);
 
-        let dot = ellipse::circle(0.0, 0.0, 3.0);
+        let dot = rectangle::square(-2.5, -2.5, 5.0);
         for rot in [DOWN_RIGHT_RAD, UP_RIGHT_RAD, DOWN_LEFT_RAD, UP_LEFT_RAD].iter() {
             let corner_rot = rot + self.rotation;
             if self.debug {
                 let corner = rotated_position(ship_pos, corner_rot, SHIP_SIZE / 2.0);
-                ellipse(BLUE, dot, camera.trans(corner.x, corner.y), g);
+                rectangle(BLUE, dot, camera.trans(corner.x, corner.y), g);
             }
         }
 
@@ -287,7 +313,8 @@ impl App {
         let (closest_planet_idx, closest_planet_distance) = self.update_collision(ship_pos);
         self.update_attach(closest_planet_idx, closest_planet_distance, ship_pos, input);
 
-        // Put a bound on rotation. This may be pointless...?
+        // Put a bound on rotation, because maybe something bad will happen if someone spins in one
+        // direction for an hour
         if self.rotation > PI {
             self.rotation -= 2.0 * PI
         }
@@ -390,16 +417,41 @@ impl App {
         }
     }
 
+    fn update_win(&mut self) {
+        self.space = Space::new();
+        let attached_planet_idx = self.space.get_nearby_planets()[0].0;
+        self.attached_planet = attached_planet_idx;
+        let attached_planet = self.space.get_planet(attached_planet_idx);
+        self.height = attached_planet.radius;
+        self.closest_planet_coords = attached_planet.pos;
+    }
+
+    /// Update game state based on collision.
+    /// Returns the closest planet and the distance to it (for use in attachment).
     fn update_collision(&mut self, ship_pos: Point) -> (PlanetIndex, f64) {
         let ship_ball = Ball::new(SHIP_SIZE / 2.0);
-        let na_ship_pos = Isometry2::new(Vector2::new(ship_pos.x, ship_pos.y), na::zero());
+        let na_ship_pos = coll_pt(ship_pos);
         let mut closest_planet_distance = self.height;
         let mut closest_planet_idx: PlanetIndex = self.attached_planet;
-        let planets = self.space.get_nearby_planets();
 
-        for (planet_index, planet) in planets {
+
+        // check if the player found the magic planet
+        {
+            let planet_ball = Ball::new(MAGIC_PLANET_SIZE);
+            let planet_pos = coll_pt(self.magic_planet);
+            if let Some(_) = query::contact(&na_ship_pos,
+                                            &ship_ball,
+                                            &planet_pos,
+                                            &planet_ball,
+                                            0.0) {
+                self.update_win();
+                return (self.attached_planet, self.height);
+            }
+        }
+
+        for (planet_index, planet) in self.space.get_nearby_planets() {
             let planet_ball = Ball::new(planet.radius);
-            let planet_pos = Isometry2::new(Vector2::new(planet.pos.x, planet.pos.y), na::zero());
+            let planet_pos = coll_pt(planet.pos);
 
             // Check if this is the closest planet
             let distance = query::distance(&na_ship_pos, &ship_ball, &planet_pos, &planet_ball);
@@ -496,10 +548,10 @@ impl App {
                 let planet = self.space.get_planet(crawler.attached);
                 let bug_pos =
                     rotated_position(planet.pos, crawler.rotation, planet.radius + CRAWLER_SIZE);
-                Isometry2::new(Vector2::new(bug_pos.x, bug_pos.y), na::zero())
+                coll_pt(bug_pos)
             };
             for bullet in self.bullets.iter() {
-                let bpos = Isometry2::new(Vector2::new(bullet.pos.x, bullet.pos.y), na::zero());
+                let bpos = coll_pt(bullet.pos);
                 let collided = query::contact(&crawler_pos, &crawler_ball, &bpos, &bball, 0.0);
                 if let Some(_) = collided {
                     self.space.delete_bug(area, crawler_idx);
@@ -512,11 +564,11 @@ impl App {
 fn main() {
     let mut window: PistonWindow = WindowSettings::new("Circles", [1024, 768])
         .exit_on_esc(true)
-        .vsync(false)
+        .vsync(true)
         // .samples(8)
         .build()
         .unwrap();
-
+    window.set_max_fps(60);
     let assets = find_folder::Search::ParentsThenKids(3, 3)
         .for_folder("assets")
         .unwrap();
@@ -545,6 +597,8 @@ fn main() {
     let mut input = GameInput::new();
     let mut cursor: Option<[f64; 2]> = None;
     let mut shooting = false;
+
+    let mut fps_counter = fps_counter::FPSCounter::new();
     while let Some(e) = window.next() {
         cursor = match e.mouse_cursor_args() {
             None => cursor,
@@ -609,6 +663,6 @@ fn main() {
                 input.toggle_debug = false;
             }
         }
-        app.render(&mut window, &e, &mut glyphs);
+        app.render(&mut window, &e, &mut glyphs, &mut fps_counter);
     }
 }
