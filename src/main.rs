@@ -86,7 +86,6 @@ pub struct App {
     // NES-style would be to make this a [(f64, f64); 3], so only three bullets can exist at once
     bullets: Vec<Bullet>,
     fire_cooldown: f64,
-    magic_planet: Point,
     camera_pos: Point,
 }
 
@@ -226,14 +225,15 @@ impl App {
                                     planet.radius));
             }
         }
-        if circle_in_view(self.magic_planet,
+        if circle_in_view(self.space.get_magic_planet(),
                           MAGIC_PLANET_SIZE,
                           self.camera_pos,
                           view_size) {
             let planet_gfx = ellipse::circle(0.0, 0.0, MAGIC_PLANET_SIZE);
             ellipse(RED,
                     planet_gfx,
-                    camera.trans(self.magic_planet.x, self.magic_planet.y),
+                    camera.trans(self.space.get_magic_planet().x,
+                                 self.space.get_magic_planet().y),
                     g);
         }
     }
@@ -273,7 +273,7 @@ impl App {
         const DOWN_LEFT_RAD: f64 = PI * (3.0 / 4.0);
         const UP_LEFT_RAD: f64 = -DOWN_LEFT_RAD;
 
-        let magic_dir = direction_from_to(ship_pos, self.magic_planet);
+        let magic_dir = direction_from_to(ship_pos, self.space.get_magic_planet());
 
         let dot = rectangle::square(-2.5, -2.5, 5.0);
         for rot in [DOWN_RIGHT_RAD, UP_RIGHT_RAD, DOWN_LEFT_RAD, UP_LEFT_RAD].iter() {
@@ -451,7 +451,7 @@ impl App {
         // check if the player found the magic planet
         {
             let planet_ball = Ball::new(MAGIC_PLANET_SIZE);
-            let planet_pos = coll_pt(self.magic_planet);
+            let planet_pos = coll_pt(self.space.get_magic_planet());
             if let Some(_) = query::contact(&na_ship_pos,
                                             &ship_ball,
                                             &planet_pos,
@@ -477,6 +477,7 @@ impl App {
                 query::contact(&na_ship_pos, &ship_ball, &planet_pos, &planet_ball, -1.0);
             if let Some(_) = collided {
                 // We are landing on a new planet
+                println!("Landing on new planet: {:?}", planet_index);
                 self.attached_planet = planet_index;
                 self.flying = false;
                 self.jumping = false;
@@ -603,7 +604,7 @@ fn main() {
 
     // Create a new game and run it.
     let space = Space::new();
-    let attached_planet_idx = space.get_nearby_planets()[0].0;
+    let attached_planet_idx = space.get_first_planet();
     let mut app = App {
         score: 0,
         debug: false,
@@ -618,7 +619,6 @@ fn main() {
         closest_planet_coords: space.get_planet(attached_planet_idx).pos,
         bullets: vec![],
         space: Space::new(),
-        magic_planet: pt(500.0, 500.0),
     };
     let mut input = GameInput::new();
     let mut cursor: Option<[f64; 2]> = None;

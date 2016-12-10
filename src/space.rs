@@ -55,8 +55,10 @@ pub type Area = (i32, i32);
 #[derive(Debug)]
 pub struct Space {
     // Keep this private!
+    // this uses a HashMap for CrawlerBugs so that they're easier to delete
     areas: HashMap<Area, (Vec<Planet>, HashMap<usize, CrawlerBug>)>,
     current_point: Point,
+    magic_planet: Point,
 }
 
 impl Space {
@@ -64,6 +66,7 @@ impl Space {
         let mut sp = Space {
             areas: HashMap::new(),
             current_point: pt(0.0, 0.0),
+            magic_planet: pt(0.0, 0.0),
         };
         sp.generate_level();
         sp
@@ -74,7 +77,11 @@ impl Space {
     }
 
     pub fn get_focus(&self) -> Point {
-        return self.current_point;
+        self.current_point
+    }
+
+    pub fn get_magic_planet(&self) -> Point {
+        self.magic_planet
     }
 
     /// Return all nearby planets
@@ -168,29 +175,36 @@ impl Space {
 
     /// Generate planets around the current center point
     fn generate_level(&mut self) {
+        const MIN_PLANET_DISTANCE: f64 = 100.0;
+        const MAX_PLANET_DISTANCE: f64 = 500.0;
+        const MIN_PLANET_SIZE: f64 = 35.0;
+        const MAX_PLANET_SIZE: f64 = 100.0;
+        const PATH_VARIANCE: f64 = 0.1; // applied to radians
+        const CRAWLER_PERCENTAGE: f64 = 0.5;
+
+
         // use an absolute bug count to index bugs so that we can safely delete them even while
         // looping over them.
         // I use Atomic only so I can avoid "unsafe" blocks which would be needed for static mut
         static BUG_COUNT: AtomicUsize = ATOMIC_USIZE_INIT;
 
         let range_circle = Range::new(-2.0 * PI, 2.0 * PI);
-        let range_distance = Range::new(100.0, 500.0);
-        let range_radius = Range::new(35.0, 100.0);
-        let range_direction = Range::new(-PI * 0.1, PI * 0.1);
-        let range_bool = Range::new(0, 2);
+        let range_distance = Range::new(MIN_PLANET_DISTANCE, MAX_PLANET_DISTANCE);
+        let range_radius = Range::new(MIN_PLANET_SIZE, MAX_PLANET_SIZE);
+        let range_direction = Range::new(-PI * PATH_VARIANCE, PI * PATH_VARIANCE);
+        let range_crawler_exists = Range::new(0.0, 1.0);
         let mut rng = rand::thread_rng();
 
         self.areas.insert((0, 0),
                           (vec![Planet {
                                     radius: 50.0,
-                                    pos: pt(1.0, 1.0),
+                                    pos: pt(0.0, 0.0),
                                 }],
                            HashMap::new()));
-        let mut prev_pos = pt(1.0, 1.0);
+        let mut prev_pos = pt(0.0, 0.0);
         let mut prev_rot = range_circle.ind_sample(&mut rng);
 
-
-        for _ in 0..50 {
+        for _ in 0..25 {
             let radius = range_radius.ind_sample(&mut rng);
             let distance = range_distance.ind_sample(&mut rng);
             let direction = range_direction.ind_sample(&mut rng);
@@ -208,7 +222,7 @@ impl Space {
             prev_pos = pos;
             prev_rot = direction;
             // and the bug
-            if range_bool.ind_sample(&mut rng) == 1 {
+            if range_crawler_exists.ind_sample(&mut rng) > CRAWLER_PERCENTAGE {
                 let rot = range_circle.ind_sample(&mut rng);
                 let planet_num = self.areas[&area].0.len() - 1;
                 self.areas
@@ -224,7 +238,8 @@ impl Space {
                                 },
                             });
             }
-
         }
+
+        self.magic_planet = rotated_position(prev_pos, prev_rot, 600.0);
     }
 }
