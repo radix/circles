@@ -58,6 +58,7 @@ impl GameInput {
 
 #[derive(Debug)]
 pub struct App {
+    score: i8,
     debug: bool,
     rotation: f64, // ship rotation / position along the orbit
     flying: bool,
@@ -141,6 +142,7 @@ impl App {
             let camera = c.transform.trans(-self.camera_pos.x, -self.camera_pos.y);
             clear(BLACK, g);
 
+            self.render_score(glyphs, &c, g);
             self.render_ship(glyphs, ship_pos, camera, &c, g);
             self.render_planets(glyphs, planets, camera, &c, g, view_size);
             self.render_bugs(bugs, camera, g, view_size);
@@ -169,6 +171,14 @@ impl App {
                                               glyphs,
                                               &context.draw_state,
                                               context.transform.trans(100.0, 100.0),
+                                              g);
+    }
+
+    fn render_score(&self, glyphs: &mut Glyphs, context: &Context, g: &mut G2d) {
+        text::Text::new_color(WHITE, 20).draw(&format!("{}", self.score),
+                                              glyphs,
+                                              &context.draw_state,
+                                              context.transform.trans(20.0, 20.0),
                                               g);
     }
 
@@ -419,7 +429,8 @@ impl App {
         }
     }
 
-    fn update_reset(&mut self) {
+    fn update_reset(&mut self, win: bool) {
+        self.score += if win { 1 } else { -1 };
         self.space = Space::new();
         let attached_planet_idx = self.space.get_nearby_planets()[0].0;
         self.attached_planet = attached_planet_idx;
@@ -451,7 +462,7 @@ impl App {
                                             &planet_pos,
                                             &planet_ball,
                                             0.0) {
-                self.update_reset();
+                self.update_reset(true);
                 return (self.attached_planet, self.height);
             }
         }
@@ -563,7 +574,7 @@ impl App {
                 let uhoh =
                     query::contact(&crawler_pos, &crawler_ball, &na_ship_pos, &ship_ball, 0.0);
                 if let Some(_) = uhoh {
-                    self.update_reset();
+                    self.update_reset(false);
                     return;
                 }
             }
@@ -597,6 +608,7 @@ fn main() {
     let space = Space::new();
     let attached_planet_idx = space.get_nearby_planets()[0].0;
     let mut app = App {
+        score: 0,
         debug: false,
         camera_pos: pt(-0.0, -0.0),
         flying: false,
