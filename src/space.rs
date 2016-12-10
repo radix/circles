@@ -70,7 +70,7 @@ pub struct CrawlerBug {
     pub rotation: f64,
 }
 
-type Area = (i32, i32);
+pub type Area = (i32, i32);
 
 /// Space is responsible for holding all the planets in the universe, generating planets when the
 /// ship moves through space, and also giving a view of nearby planets. It is responsible for
