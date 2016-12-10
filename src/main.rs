@@ -258,7 +258,12 @@ impl App {
         if self.rotation < -PI {
             self.rotation += 2.0 * PI
         }
-        self.camera_pos = self.update_camera(view_size, self.camera_pos, ship_pos);
+        let on_planet = if self.flying || self.jumping {
+            None
+        } else {
+            Some(self.space.get_planet(self.attached_planet).pos)
+        };
+        self.camera_pos = self.update_camera(view_size, on_planet, self.camera_pos, ship_pos);
 
         self.update_bugs(args.dt);
         self.space.focus(ship_pos);
@@ -403,31 +408,46 @@ impl App {
     // Update the camera so that the ship stays in view with a margin around the screen.
     fn update_camera(&self,
                      view_size: piston_window::Size,
+                     on_planet: Option<Point>,
                      camera_pos: Point,
                      ship_pos: Point)
                      -> Point {
-        let x_margin = (1.0 / 3.0) * view_size.width as f64;
-        let y_margin = (1.0 / 3.0) * view_size.height as f64;
-        let view_width_with_margin = view_size.width as f64 * (2.0 / 3.0);
-        let view_height_with_margin = view_size.height as f64 * (2.0 / 3.0);
+        match on_planet {
+            Some(planet_center) => {
+                pt(lerp(camera_pos.x,
+                        planet_center.x - (view_size.width as f64 / 2.0),
+                        0.03),
+                   lerp(camera_pos.y,
+                        planet_center.y - (view_size.height as f64 / 2.0),
+                        0.03))
+            }
+            None => {
+                let x_margin = (1.0 / 3.0) * view_size.width as f64;
+                let y_margin = (1.0 / 3.0) * view_size.height as f64;
+                let view_width_with_margin = view_size.width as f64 * (2.0 / 3.0);
+                let view_height_with_margin = view_size.height as f64 * (2.0 / 3.0);
 
-        // this seems like it's way more complicated than it should be
-        let x = if ship_pos.x > self.camera_pos.x + view_width_with_margin {
-            self.camera_pos.x + ship_pos.x - (self.camera_pos.x + view_width_with_margin)
-        } else if ship_pos.x < self.camera_pos.x + x_margin {
-            self.camera_pos.x + ship_pos.x - self.camera_pos.x - x_margin
-        } else {
-            self.camera_pos.x
-        };
-        let y = if ship_pos.y > self.camera_pos.y + view_height_with_margin {
-            self.camera_pos.y + ship_pos.y - (self.camera_pos.y + view_height_with_margin)
-        } else if ship_pos.y < self.camera_pos.y + y_margin {
-            self.camera_pos.y + ship_pos.y - self.camera_pos.y - y_margin
-        } else {
-            self.camera_pos.y
-        };
-        // pt((camera_pos.x + x) / 2.0, (camera_pos.y + y) / 2.0)
-        pt(lerp(camera_pos.x, x, 0.1), lerp(camera_pos.y, y, 0.1))
+                // this seems like it's way more complicated than it should be
+                let x = if ship_pos.x > self.camera_pos.x + view_width_with_margin {
+                    self.camera_pos.x + ship_pos.x - (self.camera_pos.x + view_width_with_margin)
+                } else if ship_pos.x < self.camera_pos.x + x_margin {
+                    self.camera_pos.x + ship_pos.x - self.camera_pos.x - x_margin
+                } else {
+                    self.camera_pos.x
+                };
+                let y = if ship_pos.y > self.camera_pos.y + view_height_with_margin {
+                    self.camera_pos.y + ship_pos.y - (self.camera_pos.y + view_height_with_margin)
+                } else if ship_pos.y < self.camera_pos.y + y_margin {
+                    self.camera_pos.y + ship_pos.y - self.camera_pos.y - y_margin
+                } else {
+                    self.camera_pos.y
+                };
+                // pt((camera_pos.x + x) / 2.0, (camera_pos.y + y) / 2.0)
+                pt(lerp(camera_pos.x, x, 0.1), lerp(camera_pos.y, y, 0.1))
+
+
+            }
+        }
     }
 
     fn update_bugs(&mut self, time_delta: f64) {
