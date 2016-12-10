@@ -175,9 +175,15 @@ impl App {
                       view_size: Size) {
         for (pidx, planet) in planets {
             if circle_in_view(planet.pos, planet.radius, self.camera_pos, view_size) {
-                let circle = ellipse::circle(0.0, 0.0, planet.radius);
                 let planet_transform = camera.trans(planet.pos.x, planet.pos.y);
-                ellipse(BLUE, circle, planet_transform, g);
+                if !self.debug {
+                    let circle = ellipse::circle(0.0, 0.0, planet.radius);
+                    ellipse(BLUE, circle, planet_transform, g);
+                } else {
+                    let side = (planet.radius * 2.0) / ((2.0 as f64).sqrt());
+                    let circle = rectangle::square(-side / 2.0, -side / 2.0, side);
+                    rectangle(BLUE, circle, planet_transform, g);
+                }
                 self.debug(g,
                            &context,
                            glyphs,
@@ -225,7 +231,6 @@ impl App {
                 ellipse(RED, bullet_gfx, camera.trans(bullet.pos.x, bullet.pos.y), g);
             }
         }
-
     }
 
     /// Draw the hint towards the magic planet
