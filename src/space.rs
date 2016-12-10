@@ -191,7 +191,7 @@ impl Space {
     fn realize(&mut self) {
         // use an absolute bug count to index bugs so that we can safely delete them even while
         // looping over them.
-        // I only use Atomic so I can avoid "unsafe" blocks
+        // I use Atomic only so I can avoid "unsafe" blocks which would be needed for static mut
         static BUG_COUNT: AtomicUsize = ATOMIC_USIZE_INIT;
         for area in self.get_nearby_areas() {
             if !self.areas.contains_key(&area) {

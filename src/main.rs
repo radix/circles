@@ -30,6 +30,14 @@ const FIRE_COOLDOWN: f64 = 0.1;
 const GRAVITY: f64 = 50.0;
 const MAGIC_PLANET_SIZE: f64 = 200.0;
 
+const GREEN: [f32; 4] = [0.0, 1.0, 0.0, 1.0];
+const RED: [f32; 4] = [1.0, 0.0, 0.0, 1.0];
+const DARKRED: [f32; 4] = [0.5, 0.0, 0.0, 1.0];
+const BLUE: [f32; 4] = [0.0, 0.0, 1.0, 1.0];
+const BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
+const WHITE: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
+
+
 struct GameInput {
     toggle_debug: bool,
     left: bool,
@@ -58,21 +66,26 @@ impl GameInput {
 
 #[derive(Debug)]
 pub struct App {
-    score: i8,
+    // meta-state? or something
     debug: bool,
+    // rendering state
+    // glyphs: Glyphs
+    //
+    // gameplay state
+    space: Space,
+    score: i8,
     rotation: f64, // ship rotation / position along the orbit
     flying: bool,
     jumping: bool,
     exit_speed: f64,
     height: f64,
-    space: Space,
     attached_planet: PlanetIndex,
     closest_planet_coords: Point, // redundant data, optimization
     // NES-style would be to make this a [(f64, f64); 3], so only three bullets can exist at once
     bullets: Vec<Bullet>,
     fire_cooldown: f64,
-    camera_pos: Point,
     magic_planet: Point,
+    camera_pos: Point,
 }
 
 
@@ -92,13 +105,6 @@ fn circle_in_view(point: Point,
 fn direction_from_to(from: Point, to: Point) -> f64 {
     (to.y - from.y).atan2(to.x - from.x)
 }
-
-const GREEN: [f32; 4] = [0.0, 1.0, 0.0, 1.0];
-const RED: [f32; 4] = [1.0, 0.0, 0.0, 1.0];
-const DARKRED: [f32; 4] = [0.5, 0.0, 0.0, 1.0];
-const BLUE: [f32; 4] = [0.0, 0.0, 1.0, 1.0];
-const BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
-const WHITE: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
 
 fn rotated_position(origin: Point, rotation: f64, height: f64) -> Point {
     pt(origin.x + (rotation.cos() * height),
@@ -602,6 +608,8 @@ fn main() {
         .unwrap();
     let ref font = assets.join("FiraSans-Regular.ttf");
     let factory = window.factory.clone();
+    // I *could* make glyphs a part of App, but then self would have to be mut and I don't want to
+    // do that.
     let mut glyphs: Glyphs = Glyphs::new(font, factory).unwrap();
 
     // Create a new game and run it.
