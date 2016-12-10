@@ -1,38 +1,15 @@
 extern crate rand;
 
 use std::collections::HashMap;
-use std::fmt;
 use std::f64::consts::PI;
-
 use std::sync::atomic::{AtomicUsize, Ordering, ATOMIC_USIZE_INIT};
 
 use self::rand::distributions::{IndependentSample, Range};
+use calc::*;
 
 const AREA_WIDTH: f64 = 2560.0;
 const AREA_HEIGHT: f64 = 2560.0;
 
-
-#[derive(Debug, Clone, Copy)]
-pub struct Point {
-    pub x: f64,
-    pub y: f64,
-}
-
-impl Point {
-    pub fn new(x: f64, y: f64) -> Point {
-        Point { x: x, y: y }
-    }
-}
-
-impl fmt::Display for Point {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:.0}/{:.0}", self.x, self.y)
-    }
-}
-
-pub fn pt(x: f64, y: f64) -> Point {
-    Point::new(x, y)
-}
 
 #[derive(Debug)]
 pub struct Planet {
@@ -88,13 +65,12 @@ impl Space {
             areas: HashMap::new(),
             current_point: pt(0.0, 0.0),
         };
-        sp.realize();
+        sp.generate_level();
         sp
     }
 
     pub fn focus(&mut self, p: Point) {
         self.current_point = p;
-        self.realize();
     }
 
     pub fn get_focus(&self) -> Point {
@@ -106,22 +82,20 @@ impl Space {
         self.get_nearby_areas()
             .iter()
             .flat_map::<Vec<(PlanetIndex, &Planet)>, _>(|area| {
-                let ref planets = self.areas
-                    .get(&area)
-                    .expect(&format!("Uninitialized PLANET area {:?} when in area {:?}",
-                                     area,
-                                     self.get_central_area()))
-                    .0;
-                planets.iter()
-                    .enumerate()
-                    .map(|(i, p)| {
-                        (PlanetIndex {
-                             area: area.clone(),
-                             idx: i,
-                         },
-                         p)
-                    })
-                    .collect()
+                if let Some(&(ref planets, _)) = self.areas.get(&area) {
+                    planets.iter()
+                        .enumerate()
+                        .map(|(i, p)| {
+                            (PlanetIndex {
+                                 area: area.clone(),
+                                 idx: i,
+                             },
+                             p)
+                        })
+                        .collect()
+                } else {
+                    vec![]
+                }
 
             })
             .collect()
@@ -132,13 +106,11 @@ impl Space {
         self.get_nearby_areas()
             .iter()
             .flat_map::<Vec<(Area, usize)>, _>(|area| {
-                self.areas
-                    .get(&area)
-                    .unwrap()
-                    .1
-                    .keys()
-                    .map(|i| (area.clone(), i.clone()))
-                    .collect()
+                if let Some(&(_, ref bugs)) = self.areas.get(&area) {
+                    bugs.keys().map(|i| (area.clone(), i.clone())).collect()
+                } else {
+                    vec![]
+                }
             })
             .collect()
     }
@@ -177,48 +149,57 @@ impl Space {
              (x + 1, y + 1)]
     }
 
-    fn get_area(p: Point) -> Area {
+    fn area_for_point(p: Point) -> Area {
         let x = p.x / AREA_WIDTH;
         let y = p.y / AREA_HEIGHT;
         (x.floor() as i32, y.floor() as i32)
     }
 
     pub fn get_central_area(&self) -> Area {
-        Space::get_area(self.current_point)
+        Space::area_for_point(self.current_point)
+    }
+
+    pub fn get_first_planet(&self) -> PlanetIndex {
+        PlanetIndex {
+            area: (0, 0),
+            idx: 0,
+        }
     }
 
     /// Generate planets around the current center point
-    fn realize(&mut self) {
+    fn generate_level(&mut self) {
         // use an absolute bug count to index bugs so that we can safely delete them even while
         // looping over them.
         // I use Atomic only so I can avoid "unsafe" blocks which would be needed for static mut
         static BUG_COUNT: AtomicUsize = ATOMIC_USIZE_INIT;
-        for area in self.get_nearby_areas() {
-            if !self.areas.contains_key(&area) {
-                let mut planets = Space::gen_planets();
-                for planet in planets.iter_mut() {
-                    planet.pos.x += area.0 as f64 * AREA_WIDTH;
-                    planet.pos.y += area.1 as f64 * AREA_HEIGHT;
-                }
-                let bugs = {
-                    let planets_with_indices = planets.iter()
-                        .enumerate()
-                        .map(|(i, &ref p)| {
-                            (PlanetIndex {
-                                 area: area,
-                                 idx: i,
-                             },
-                             p)
-                        })
-                        .collect();
-                    Space::gen_bugs(&planets_with_indices)
-                        .into_iter()
-                        .map(|b| (BUG_COUNT.fetch_add(1, Ordering::SeqCst), b))
-                        .collect()
-                };
 
-                self.areas.insert(area, (planets, bugs));
+        let mut rng = rand::thread_rng();
+        self.areas.insert((0, 0),
+                          (vec![Planet {
+                                    radius: 50.0,
+                                    pos: pt(1.0, 1.0),
+                                }],
+                           HashMap::new()));
+        let mut prev_pos = pt(1.0, 1.0);
+
+        let range_distance = Range::new(100.0, 500.0);
+        let range_radius = Range::new(35.0, 100.0);
+        let range_direction = Range::new(-PI, PI);
+        for _ in 0..50 {
+            let radius = range_radius.ind_sample(&mut rng);
+            let distance = range_distance.ind_sample(&mut rng);
+            let direction = range_direction.ind_sample(&mut rng);
+            let pos = rotated_position(prev_pos, direction, distance);
+            let mut planet = Planet {
+                pos: pos,
+                radius: radius,
+            };
+            let area = Self::area_for_point(pos);
+            self.areas.entry(area).or_insert((vec![], HashMap::new()));
+            if let Some(area_content) = self.areas.get_mut(&area) {
+                area_content.0.push(planet);
             }
+            prev_pos = pos;
         }
     }
 

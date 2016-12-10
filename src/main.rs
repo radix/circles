@@ -13,8 +13,10 @@ use ncollide::shape::Ball;
 use na::{Isometry2, Vector2};
 
 mod space;
+mod calc;
 
 use space::*;
+use calc::*;
 
 const SHIP_SIZE: f64 = 50.0;
 const CRAWLER_SIZE: f64 = 25.0;
@@ -91,6 +93,11 @@ pub struct App {
 
 type Transform = [[f64; 3]; 2];
 
+
+fn coll_pt(point: Point) -> Isometry2<f64> {
+    Isometry2::new(Vector2::new(point.x, point.y), na::zero())
+}
+
 /// Check if a circle is in the current viewport.
 fn circle_in_view(point: Point,
                   radius: f64,
@@ -99,24 +106,6 @@ fn circle_in_view(point: Point,
                   -> bool {
     point.x + radius > camera.x && point.x - radius < camera.x + view_size.width as f64 ||
     point.y + radius > camera.y && point.y - radius < camera.y + view_size.height as f64
-}
-
-/// Get the direction (in Radians) from one point to another.
-fn direction_from_to(from: Point, to: Point) -> f64 {
-    (to.y - from.y).atan2(to.x - from.x)
-}
-
-fn rotated_position(origin: Point, rotation: f64, height: f64) -> Point {
-    pt(origin.x + (rotation.cos() * height),
-       origin.y + (rotation.sin() * height))
-}
-
-fn lerp(a: f64, b: f64, t: f64) -> f64 {
-    a + t * (b - a)
-}
-
-fn coll_pt(point: Point) -> Isometry2<f64> {
-    Isometry2::new(Vector2::new(point.x, point.y), na::zero())
 }
 
 impl App {
@@ -438,7 +427,7 @@ impl App {
     fn update_reset(&mut self, win: bool) {
         self.score += if win { 1 } else { -1 };
         self.space = Space::new();
-        let attached_planet_idx = self.space.get_nearby_planets()[0].0;
+        let attached_planet_idx = self.space.get_first_planet();
         self.attached_planet = attached_planet_idx;
         let attached_planet = self.space.get_planet(attached_planet_idx);
         self.height = attached_planet.radius;
