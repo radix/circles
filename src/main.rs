@@ -96,15 +96,6 @@ const BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
 const WHITE: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
 
 
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug)]
-enum Cardinal4 {
-    Up,
-    Down,
-    Left,
-    Right,
-}
-
-
 fn rotated_position(origin: Point, rotation: f64, height: f64) -> Point {
     pt(origin.x + (rotation.cos() * height),
        origin.y + (rotation.sin() * height))
@@ -149,7 +140,7 @@ impl App {
                                 self.closest_planet_coords.y];
             line(GREEN, 1.0, nearest_beam, camera, g);
 
-            self.render_hint(ship_pos, c.transform, g, view_size);
+            self.render_hint(ship_pos, camera, g);
             // Draw the attached beam
             let attached = &self.space.get_planet(self.attached_planet);
             let attached_beam = [ship_pos.x, ship_pos.y, attached.pos.x, attached.pos.y];
@@ -238,31 +229,37 @@ impl App {
     }
 
     /// Draw the hint towards the magic planet
-    fn render_hint(&self, ship_pos: Point, transform: Transform, g: &mut G2d, view_size: Size) {
+    fn render_hint(&self, ship_pos: Point, camera: Transform, g: &mut G2d) {
         const DOWN_RIGHT_RAD: f64 = PI / 4.0;
         const UP_RIGHT_RAD: f64 = -DOWN_RIGHT_RAD;
         const DOWN_LEFT_RAD: f64 = PI * (3.0 / 4.0);
         const UP_LEFT_RAD: f64 = -DOWN_LEFT_RAD;
 
-        let ship_rot = direction_from_to(ship_pos, self.magic_planet);
-        let cardinal = if DOWN_RIGHT_RAD > ship_rot && ship_rot > UP_RIGHT_RAD {
-            Cardinal4::Right
-        } else if DOWN_LEFT_RAD > ship_rot && ship_rot > DOWN_RIGHT_RAD {
-            Cardinal4::Down
-        } else if UP_LEFT_RAD < ship_rot && ship_rot < UP_RIGHT_RAD {
-            Cardinal4::Up
+        let magic_dir = direction_from_to(ship_pos, self.magic_planet);
+
+        let dot = ellipse::circle(0.0, 0.0, 3.0);
+        for rot in [DOWN_RIGHT_RAD, UP_RIGHT_RAD, DOWN_LEFT_RAD, UP_LEFT_RAD].iter() {
+            let corner_rot = rot + self.rotation;
+            if self.debug {
+                let corner = rotated_position(ship_pos, corner_rot, SHIP_SIZE / 2.0);
+                ellipse(BLUE, dot, camera.trans(corner.x, corner.y), g);
+            }
+        }
+
+        let hint_rad = if DOWN_RIGHT_RAD + self.rotation > magic_dir &&
+                          magic_dir > UP_RIGHT_RAD + self.rotation {
+            self.rotation
+        } else if DOWN_LEFT_RAD + self.rotation > magic_dir &&
+                                 magic_dir > DOWN_RIGHT_RAD + self.rotation {
+            self.rotation + PI / 2.0
+        } else if UP_LEFT_RAD + self.rotation < magic_dir &&
+                                 magic_dir < UP_RIGHT_RAD + self.rotation {
+            self.rotation - PI / 2.0
         } else {
-            Cardinal4::Left
+            self.rotation - PI
         };
-        let width = view_size.width as f64;
-        let height = view_size.height as f64;
-        let hint_line = match cardinal {
-            Cardinal4::Up => [0.0, 5.0, width, 5.0],
-            Cardinal4::Right => [width - 2.5, 0.0, width - 2.5, height],
-            Cardinal4::Left => [2.5, 0.0, 2.5, height],
-            Cardinal4::Down => [0.0, height - 2.5, width, height - 2.5],
-        };
-        line(RED, 5.0, hint_line, transform, g);
+        let hint_pos = rotated_position(ship_pos, hint_rad, 30.0);
+        ellipse(GREEN, dot, camera.trans(hint_pos.x, hint_pos.y), g);
     }
 
     fn update(&mut self, args: &UpdateArgs, view_size: Size, input: &GameInput) {
