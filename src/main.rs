@@ -1,3 +1,5 @@
+// apparently I will be able to add this soon to make this app not open a console window on start
+// #![windows_subsystem = "Windows"]
 extern crate piston_window;
 extern crate ncollide;
 extern crate nalgebra as na;
@@ -328,7 +330,7 @@ impl App {
         };
         self.camera_pos = self.update_camera(view_size, on_planet, self.camera_pos, ship_pos);
 
-        self.update_bugs(args.dt);
+        self.update_bugs(ship_pos, args.dt);
         self.space.focus(ship_pos);
     }
 
@@ -417,13 +419,19 @@ impl App {
         }
     }
 
-    fn update_win(&mut self) {
+    fn update_reset(&mut self) {
         self.space = Space::new();
         let attached_planet_idx = self.space.get_nearby_planets()[0].0;
         self.attached_planet = attached_planet_idx;
         let attached_planet = self.space.get_planet(attached_planet_idx);
         self.height = attached_planet.radius;
         self.closest_planet_coords = attached_planet.pos;
+        self.bullets = vec![];
+        self.flying = false;
+        self.jumping = false;
+        self.fire_cooldown = 0.0;
+        self.exit_speed = 0.0;
+        self.rotation = 0.0;
     }
 
     /// Update game state based on collision.
@@ -434,7 +442,6 @@ impl App {
         let mut closest_planet_distance = self.height;
         let mut closest_planet_idx: PlanetIndex = self.attached_planet;
 
-
         // check if the player found the magic planet
         {
             let planet_ball = Ball::new(MAGIC_PLANET_SIZE);
@@ -444,7 +451,7 @@ impl App {
                                             &planet_pos,
                                             &planet_ball,
                                             0.0) {
-                self.update_win();
+                self.update_reset();
                 return (self.attached_planet, self.height);
             }
         }
@@ -538,7 +545,7 @@ impl App {
         }
     }
 
-    fn update_bugs(&mut self, time_delta: f64) {
+    fn update_bugs(&mut self, ship_pos: Point, time_delta: f64) {
         let bball = Ball::new(BULLET_SIZE);
         let crawler_ball = Ball::new(CRAWLER_SIZE);
         for (area, crawler_idx) in self.space.get_nearby_bugs() {
@@ -550,6 +557,16 @@ impl App {
                     rotated_position(planet.pos, crawler.rotation, planet.radius + CRAWLER_SIZE);
                 coll_pt(bug_pos)
             };
+            {
+                let na_ship_pos = coll_pt(ship_pos);
+                let ship_ball = Ball::new(SHIP_SIZE);
+                let uhoh =
+                    query::contact(&crawler_pos, &crawler_ball, &na_ship_pos, &ship_ball, 0.0);
+                if let Some(_) = uhoh {
+                    self.update_reset();
+                    return;
+                }
+            }
             for bullet in self.bullets.iter() {
                 let bpos = coll_pt(bullet.pos);
                 let collided = query::contact(&crawler_pos, &crawler_ball, &bpos, &bball, 0.0);
