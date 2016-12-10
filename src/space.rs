@@ -173,7 +173,13 @@ impl Space {
         // I use Atomic only so I can avoid "unsafe" blocks which would be needed for static mut
         static BUG_COUNT: AtomicUsize = ATOMIC_USIZE_INIT;
 
+        let range_circle = Range::new(-2.0 * PI, 2.0 * PI);
+        let range_distance = Range::new(100.0, 500.0);
+        let range_radius = Range::new(35.0, 100.0);
+        let range_direction = Range::new(-PI * 0.1, PI * 0.1);
+        let range_bool = Range::new(0, 2);
         let mut rng = rand::thread_rng();
+
         self.areas.insert((0, 0),
                           (vec![Planet {
                                     radius: 50.0,
@@ -181,13 +187,8 @@ impl Space {
                                 }],
                            HashMap::new()));
         let mut prev_pos = pt(1.0, 1.0);
-        let mut prev_rot = 0.0;
+        let mut prev_rot = range_circle.ind_sample(&mut rng);
 
-        let range_distance = Range::new(100.0, 500.0);
-        let range_radius = Range::new(35.0, 100.0);
-        let range_direction = Range::new(-PI * 0.1, PI * 0.1);
-        let range_bool = Range::new(0, 2);
-        let range_bug_rot = Range::new(-2.0 * PI, 2.0 * PI);
 
         for _ in 0..50 {
             let radius = range_radius.ind_sample(&mut rng);
@@ -208,7 +209,7 @@ impl Space {
             prev_rot = direction;
             // and the bug
             if range_bool.ind_sample(&mut rng) == 1 {
-                let rot = range_bug_rot.ind_sample(&mut rng);
+                let rot = range_circle.ind_sample(&mut rng);
                 let planet_num = self.areas[&area].0.len() - 1;
                 self.areas
                     .get_mut(&area)
