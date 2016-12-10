@@ -90,6 +90,13 @@ const UP_RIGHT_RAD: f64 = -DOWN_RIGHT_RAD;
 const DOWN_LEFT_RAD: f64 = PI * (3.0 / 4.0);
 const UP_LEFT_RAD: f64 = -DOWN_LEFT_RAD;
 
+const GREEN: [f32; 4] = [0.0, 1.0, 0.0, 1.0];
+const RED: [f32; 4] = [1.0, 0.0, 0.0, 1.0];
+const DARKRED: [f32; 4] = [0.5, 0.0, 0.0, 1.0];
+const BLUE: [f32; 4] = [0.0, 0.0, 1.0, 1.0];
+const BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
+const WHITE: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
+
 
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug)]
 enum Cardinal4 {
@@ -134,13 +141,6 @@ impl App {
     }
 
     fn render(&self, mut window: &mut PistonWindow, event: &Event, glyphs: &mut Glyphs) {
-        const GREEN: [f32; 4] = [0.0, 1.0, 0.0, 1.0];
-        const RED: [f32; 4] = [1.0, 0.0, 0.0, 1.0];
-        const DARKRED: [f32; 4] = [0.5, 0.0, 0.0, 1.0];
-        const BLUE: [f32; 4] = [0.0, 0.0, 1.0, 1.0];
-        const BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
-        const WHITE: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
-
         let square = rectangle::square(0.0, 0.0, SHIP_SIZE);
         let view_size = window.size();
         let ship_pos = self.space.get_focus();
@@ -209,18 +209,7 @@ impl App {
             line(GREEN, 1.0, nearest_beam, camera, g);
 
             {
-                // Draw the hint line
-                let direction = direction_from_to(ship_pos, self.magic_planet);
-                let cardinal = quad_direction(direction);
-                let width = view_size.width as f64;
-                let height = view_size.height as f64;
-                let hint_line = match cardinal {
-                    Cardinal4::Up => [0.0, 5.0, width, 5.0],
-                    Cardinal4::Right => [width - 2.5, 0.0, width - 2.5, height],
-                    Cardinal4::Left => [2.5, 0.0, 2.5, height],
-                    Cardinal4::Down => [0.0, height - 2.5, width, height - 2.5],
-                };
-                line(RED, 5.0, hint_line, c.transform, g);
+                self.render_hint(ship_pos, c.transform, g, view_size);
             }
             {
                 // Draw the attached beam
@@ -229,6 +218,25 @@ impl App {
                 line(BLUE, 1.0, attached_beam, camera, g);
             }
         });
+    }
+
+    fn render_hint(&self,
+                   ship_pos: Point,
+                   transform: [[f64; 3]; 2],
+                   g: &mut G2d,
+                   view_size: Size) {
+        // Draw the hint line
+        let direction = direction_from_to(ship_pos, self.magic_planet);
+        let cardinal = quad_direction(direction);
+        let width = view_size.width as f64;
+        let height = view_size.height as f64;
+        let hint_line = match cardinal {
+            Cardinal4::Up => [0.0, 5.0, width, 5.0],
+            Cardinal4::Right => [width - 2.5, 0.0, width - 2.5, height],
+            Cardinal4::Left => [2.5, 0.0, 2.5, height],
+            Cardinal4::Down => [0.0, height - 2.5, width, height - 2.5],
+        };
+        line(RED, 5.0, hint_line, transform, g);
     }
 
     fn update(&mut self, args: &UpdateArgs, view_size: Size, input: &GameInput) {
