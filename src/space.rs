@@ -185,12 +185,15 @@ impl Space {
         let range_distance = Range::new(100.0, 500.0);
         let range_radius = Range::new(35.0, 100.0);
         let range_direction = Range::new(-PI, PI);
+        let range_bool = Range::new(0, 2);
+        let range_rot = Range::new(-2.0 * PI, 2.0 * PI);
+
         for _ in 0..50 {
             let radius = range_radius.ind_sample(&mut rng);
             let distance = range_distance.ind_sample(&mut rng);
             let direction = range_direction.ind_sample(&mut rng);
             let pos = rotated_position(prev_pos, direction, distance);
-            let mut planet = Planet {
+            let planet = Planet {
                 pos: pos,
                 radius: radius,
             };
@@ -200,6 +203,25 @@ impl Space {
                 area_content.0.push(planet);
             }
             prev_pos = pos;
+
+            // and the bug
+            if range_bool.ind_sample(&mut rng) == 1 {
+                let rot = range_rot.ind_sample(&mut rng);
+                let planet_num = self.areas[&area].0.len() - 1;
+                self.areas
+                    .get_mut(&area)
+                    .unwrap()
+                    .1
+                    .insert(BUG_COUNT.fetch_add(1, Ordering::SeqCst),
+                            CrawlerBug {
+                                rotation: rot,
+                                attached: PlanetIndex {
+                                    area: area,
+                                    idx: planet_num,
+                                },
+                            });
+            }
+
         }
     }
 

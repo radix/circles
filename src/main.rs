@@ -137,7 +137,6 @@ impl App {
             let camera = c.transform.trans(-self.camera_pos.x, -self.camera_pos.y);
             clear(BLACK, g);
 
-            self.render_score(glyphs, &c, g);
             self.render_ship(glyphs, ship_pos, camera, &c, g);
             self.render_planets(glyphs, planets, camera, &c, g, view_size);
             self.render_bugs(bugs, camera, g, view_size);
@@ -158,6 +157,7 @@ impl App {
             let attached = &self.space.get_planet(self.attached_planet);
             let attached_beam = [ship_pos.x, ship_pos.y, attached.pos.x, attached.pos.y];
             line(BLUE, 1.0, attached_beam, camera, g);
+            self.render_score(glyphs, &c, g);
         });
     }
 
