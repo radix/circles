@@ -181,17 +181,19 @@ impl Space {
                                 }],
                            HashMap::new()));
         let mut prev_pos = pt(1.0, 1.0);
+        let mut prev_rot = 0.0;
 
         let range_distance = Range::new(100.0, 500.0);
         let range_radius = Range::new(35.0, 100.0);
-        let range_direction = Range::new(-PI, PI);
+        let range_direction = Range::new(-PI * 0.1, PI * 0.1);
         let range_bool = Range::new(0, 2);
-        let range_rot = Range::new(-2.0 * PI, 2.0 * PI);
+        let range_bug_rot = Range::new(-2.0 * PI, 2.0 * PI);
 
         for _ in 0..50 {
             let radius = range_radius.ind_sample(&mut rng);
             let distance = range_distance.ind_sample(&mut rng);
             let direction = range_direction.ind_sample(&mut rng);
+            let direction = direction + prev_rot;
             let pos = rotated_position(prev_pos, direction, distance);
             let planet = Planet {
                 pos: pos,
@@ -203,10 +205,10 @@ impl Space {
                 area_content.0.push(planet);
             }
             prev_pos = pos;
-
+            prev_rot = direction;
             // and the bug
             if range_bool.ind_sample(&mut rng) == 1 {
-                let rot = range_rot.ind_sample(&mut rng);
+                let rot = range_bug_rot.ind_sample(&mut rng);
                 let planet_num = self.areas[&area].0.len() - 1;
                 self.areas
                     .get_mut(&area)
@@ -223,47 +225,5 @@ impl Space {
             }
 
         }
-    }
-
-    /// Generate some planets in an area
-    fn gen_planets() -> Vec<Planet> {
-        let range_width = Range::new(0.0, AREA_WIDTH);
-        let range_height = Range::new(0.0, AREA_HEIGHT);
-        let range_radius = Range::new(35.0, 100.0);
-        let mut rng = rand::thread_rng();
-        let range_num_planets = Range::new(8, 16);
-        let num_planets = range_num_planets.ind_sample(&mut rng);
-        (0..num_planets)
-            .map(|_| {
-                let x = range_width.ind_sample(&mut rng);
-                let y = range_height.ind_sample(&mut rng);
-                let radius = range_radius.ind_sample(&mut rng);
-                Planet {
-                    pos: pt(x, y),
-                    radius: radius,
-                }
-            })
-            .collect()
-    }
-
-    fn gen_bugs(planets: &Vec<(PlanetIndex, &Planet)>) -> Vec<CrawlerBug> {
-        let range_bool = Range::new(0, 2);
-        let range_rot = Range::new(-2.0 * PI, 2.0 * PI);
-        let mut rng = rand::thread_rng();
-        let bugs = planets.iter()
-            .filter_map(|&(pidx, _)| {
-                // half the planets will have bugaroos.
-                let rando = range_bool.ind_sample(&mut rng);
-                if rando == 1 {
-                    Some(CrawlerBug {
-                        attached: pidx,
-                        rotation: range_rot.ind_sample(&mut rng),
-                    })
-                } else {
-                    None
-                }
-            })
-            .collect();
-        bugs
     }
 }
