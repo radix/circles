@@ -23,13 +23,13 @@ const CRAWLER_SIZE: f64 = 25.0;
 const CRAWLER_SPEED: f64 = 2.0;
 const SPEED: f64 = 5.0;
 const FLY_SPEED: f64 = 3.0;
-const JUMP_SPEED: f64 = 20.0;
-const AIR_CONTROL_MOD: f64 = 0.50;
+const JUMP_SPEED: f64 = 10.0;
+const AIR_CONTROL_MOD: f64 = 0.40;
 const BULLET_SPEED: f64 = 1000.0;
 const BULLET_SIZE: f64 = 5.0;
 const ACCELERATION: f64 = 5.0;
 const FIRE_COOLDOWN: f64 = 0.1;
-const GRAVITY: f64 = 50.0;
+const GRAVITY: f64 = 20.0;
 const MAGIC_PLANET_SIZE: f64 = 200.0;
 
 const GREEN: [f32; 4] = [0.0, 1.0, 0.0, 1.0];
@@ -556,7 +556,14 @@ impl App {
         let bball = Ball::new(BULLET_SIZE);
         let crawler_ball = Ball::new(CRAWLER_SIZE);
         for (area, crawler_idx) in self.space.get_nearby_bugs() {
-            self.space.get_bug_mut(area, crawler_idx).rotation -= CRAWLER_SPEED * time_delta;
+            {
+                let bug = self.space.get_bug_mut(area, crawler_idx);
+                if bug.moves_right {
+                    bug.rotation += CRAWLER_SPEED * time_delta;
+                } else {
+                    bug.rotation -= CRAWLER_SPEED * time_delta;
+                }
+            }
             let crawler_pos = {
                 let crawler = self.space.get_bug(area, crawler_idx);
                 let planet = self.space.get_planet(crawler.attached);
@@ -566,7 +573,7 @@ impl App {
             };
             {
                 let na_ship_pos = coll_pt(ship_pos);
-                let ship_ball = Ball::new(SHIP_SIZE);
+                let ship_ball = Ball::new(SHIP_SIZE / 2.0);
                 let uhoh =
                     query::contact(&crawler_pos, &crawler_ball, &na_ship_pos, &ship_ball, 0.0);
                 if let Some(_) = uhoh {

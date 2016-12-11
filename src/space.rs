@@ -45,6 +45,7 @@ impl PlanetIndex {
 pub struct CrawlerBug {
     pub attached: PlanetIndex,
     pub rotation: f64,
+    pub moves_right: bool,
 }
 
 pub type Area = (i32, i32);
@@ -175,8 +176,8 @@ impl Space {
 
     /// Generate planets around the current center point
     fn generate_level(&mut self) {
-        const MIN_PLANET_DISTANCE: f64 = 100.0;
-        const MAX_PLANET_DISTANCE: f64 = 500.0;
+        const MIN_PLANET_DISTANCE: f64 = 150.0;
+        const MAX_PLANET_DISTANCE: f64 = 400.0;
         const MIN_PLANET_SIZE: f64 = 35.0;
         const MAX_PLANET_SIZE: f64 = 100.0;
         const PATH_VARIANCE: f64 = 0.1; // applied to radians
@@ -193,6 +194,7 @@ impl Space {
         let range_radius = Range::new(MIN_PLANET_SIZE, MAX_PLANET_SIZE);
         let range_direction = Range::new(-PI * PATH_VARIANCE, PI * PATH_VARIANCE);
         let range_crawler_exists = Range::new(0.0, 1.0);
+        let range_bool = Range::new(0, 2);
         let mut rng = rand::thread_rng();
 
         self.areas.insert((0, 0),
@@ -231,6 +233,7 @@ impl Space {
                     .1
                     .insert(BUG_COUNT.fetch_add(1, Ordering::SeqCst),
                             CrawlerBug {
+                                moves_right: range_bool.ind_sample(&mut rng) == 1,
                                 rotation: rot,
                                 attached: PlanetIndex {
                                     area: area,
@@ -240,6 +243,6 @@ impl Space {
             }
         }
 
-        self.magic_planet = rotated_position(prev_pos, prev_rot, 600.0);
+        self.magic_planet = rotated_position(prev_pos, prev_rot, 400.0);
     }
 }

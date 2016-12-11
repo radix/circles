@@ -15,7 +15,7 @@ impl Point {
 
 impl fmt::Display for Point {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:.0}/{:.0}", self.x, self.y)
+        write!(f, "{:.0},{:.0}", self.x, self.y)
     }
 }
 
