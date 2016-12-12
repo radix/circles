@@ -5,11 +5,13 @@ extern crate ncollide;
 extern crate nalgebra as na;
 extern crate find_folder;
 extern crate fps_counter;
+extern crate image as im;
 
 use std::f64::consts::PI;
 use piston_window::*;
 use ncollide::query;
 use ncollide::shape::Ball;
+use ncollide::bounding_volume::BoundingVolume;
 use na::{Isometry2, Vector2};
 
 mod space;
@@ -67,29 +69,6 @@ impl GameInput {
     }
 }
 
-#[derive(Debug)]
-pub struct App {
-    // meta-state? or something
-    debug: bool,
-    // rendering state
-    // glyphs: Glyphs
-    //
-    // gameplay state
-    space: Space,
-    score: i8,
-    rotation: f64, // ship rotation / position along the orbit
-    flying: bool,
-    jumping: bool,
-    exit_speed: f64,
-    height: f64,
-    attached_planet: PlanetIndex,
-    closest_planet_coords: Point, // redundant data, optimization
-    // NES-style would be to make this a [(f64, f64); 3], so only three bullets can exist at once
-    bullets: Vec<Bullet>,
-    fire_cooldown: f64,
-    camera_pos: Point,
-}
-
 
 type Transform = [[f64; 3]; 2];
 
@@ -106,6 +85,29 @@ fn circle_in_view(point: Point,
                   -> bool {
     point.x + radius > camera.x && point.x - radius < camera.x + view_size.width as f64 ||
     point.y + radius > camera.y && point.y - radius < camera.y + view_size.height as f64
+}
+
+
+pub struct App {
+    // meta-state? or something
+    debug: bool,
+    // rendering state
+    // glyphs: Glyphs
+    minimap: G2dTexture<'static>,
+    // gameplay state
+    space: Space,
+    score: i8,
+    rotation: f64, // ship rotation / position along the orbit
+    flying: bool,
+    jumping: bool,
+    exit_speed: f64,
+    height: f64,
+    attached_planet: PlanetIndex,
+    closest_planet_coords: Point, // redundant data, optimization
+    // NES-style would be to make this a [(f64, f64); 3], so only three bullets can exist at once
+    bullets: Vec<Bullet>,
+    fire_cooldown: f64,
+    camera_pos: Point,
 }
 
 impl App {
@@ -158,7 +160,12 @@ impl App {
             let attached_beam = [ship_pos.x, ship_pos.y, attached.pos.x, attached.pos.y];
             line(BLUE, 1.0, attached_beam, camera, g);
             self.render_score(glyphs, &c, g);
+            self.render_minimap(&c, g);
         });
+    }
+
+    fn render_minimap(&self, context: &Context, g: &mut G2d) {
+        image(&self.minimap, context.transform, g);
     }
 
     fn render_fps(&self, glyphs: &mut Glyphs, fps: usize, context: &Context, g: &mut G2d) {
@@ -440,6 +447,7 @@ impl App {
         self.fire_cooldown = 0.0;
         self.exit_speed = 0.0;
         self.rotation = 0.0;
+        // self.minimap = generate_minimap(&self.space);
     }
 
     /// Update game state based on collision.
@@ -600,6 +608,49 @@ impl App {
     }
 }
 
+fn generate_minimap(window: &mut PistonWindow, space: &Space) -> G2dTexture<'static> {
+    const MINI_WIDTH: f64 = 200.0;
+    const MINI_HEIGHT: f64 = 100.0;
+    let mut canvas = im::ImageBuffer::new(MINI_WIDTH as u32, MINI_HEIGHT as u32);
+    let planet_pixel = im::Rgba([0, 0, 255, 255]);
+    let bouncy_pixel = im::Rgba([127, 127, 255, 255]);
+    let magic_pixel = im::Rgba([255, 0, 0, 255]);
+    canvas.put_pixel(100, 50, planet_pixel);
+    // xxx use space.get_all_planets()
+    let aabb = space.get_nearby_planets()
+        .iter()
+        .fold(ncollide::bounding_volume::AABB::new_invalid(),
+              |acc, &(_, p)| {
+                  acc.merged(&ncollide::bounding_volume::aabb(&Ball::new(1.0), &coll_pt(p.pos)))
+              });
+
+    let min = aabb.mins();
+    let max = aabb.maxs();
+    println!("mins & maxs: {} {}", min, max);
+    let width = max.x - min.x;
+    let height = max.y - min.y;
+    println!("width & height: {} {}", width, height);
+
+    for (_, planet) in space.get_nearby_planets() {
+        let percent_x = (planet.pos.x - min.x) / width;
+        let percent_y = (planet.pos.y - min.y) / height;
+        let mini_x = percent_x * MINI_WIDTH;
+        let mini_y = percent_y * MINI_HEIGHT;
+        println!("planet pos: {}", planet.pos);
+        println!("'percents': {} {}", percent_x, percent_y);
+        println!("What is minis {} {}", mini_x, mini_y);
+        canvas.put_pixel((mini_x).floor() as u32,
+                         (mini_y).floor() as u32,
+                         if planet.bouncy {
+                             bouncy_pixel
+                         } else {
+                             planet_pixel
+                         });
+    }
+
+    Texture::from_image(&mut window.factory, &canvas, &TextureSettings::new()).unwrap()
+}
+
 fn main() {
     let mut window: PistonWindow = WindowSettings::new("Circles", [1024, 768])
         .exit_on_esc(true)
@@ -620,6 +671,7 @@ fn main() {
     // Create a new game and run it.
     let space = Space::new();
     let attached_planet_idx = space.get_first_planet();
+
     let mut app = App {
         score: 0,
         debug: false,
@@ -633,8 +685,10 @@ fn main() {
         attached_planet: attached_planet_idx,
         closest_planet_coords: space.get_planet(attached_planet_idx).pos,
         bullets: vec![],
-        space: Space::new(),
+        minimap: generate_minimap(&mut window, &space),
+        space: space,
     };
+
     let mut input = GameInput::new();
     let mut cursor: Option<[f64; 2]> = None;
     let mut shooting = false;
