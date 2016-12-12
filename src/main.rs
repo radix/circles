@@ -35,6 +35,7 @@ const MAGIC_PLANET_SIZE: f64 = 200.0;
 const GREEN: [f32; 4] = [0.0, 1.0, 0.0, 1.0];
 const RED: [f32; 4] = [1.0, 0.0, 0.0, 1.0];
 const DARKRED: [f32; 4] = [0.5, 0.0, 0.0, 1.0];
+const LIGHTBLUE: [f32; 4] = [0.5, 0.5, 1.0, 1.0];
 const BLUE: [f32; 4] = [0.0, 0.0, 1.0, 1.0];
 const BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
 const WHITE: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
@@ -205,13 +206,14 @@ impl App {
         for (pidx, planet) in planets {
             if circle_in_view(planet.pos, planet.radius, self.camera_pos, view_size) {
                 let planet_transform = camera.trans(planet.pos.x, planet.pos.y);
+                let color = if planet.bouncy { LIGHTBLUE } else { BLUE };
                 if !self.debug {
                     let circle = ellipse::circle(0.0, 0.0, planet.radius);
-                    ellipse(BLUE, circle, planet_transform, g);
+                    ellipse(color, circle, planet_transform, g);
                 } else {
                     let side = (planet.radius * 2.0) / ((2.0 as f64).sqrt());
                     let circle = rectangle::square(-side / 2.0, -side / 2.0, side);
-                    rectangle(BLUE, circle, planet_transform, g);
+                    rectangle(color, circle, planet_transform, g);
                 }
                 self.debug(g,
                            &context,
@@ -480,10 +482,16 @@ impl App {
                 println!("Landing on new planet: {:?}", planet_index);
                 self.attached_planet = planet_index;
                 self.flying = false;
-                self.jumping = false;
                 self.height = planet.radius + (SHIP_SIZE / 2.0);
                 self.rotation = direction_from_to(planet.pos, ship_pos);
-                self.exit_speed = 0.0;
+
+                if planet.bouncy {
+                    self.jumping = true;
+                    self.exit_speed = JUMP_SPEED;
+                } else {
+                    self.jumping = false;
+                    self.exit_speed = 0.0;
+                }
             }
         }
         (closest_planet_idx, closest_planet_distance)

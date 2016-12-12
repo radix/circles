@@ -15,6 +15,7 @@ const AREA_HEIGHT: f64 = 2560.0;
 pub struct Planet {
     pub pos: Point,
     pub radius: f64,
+    pub bouncy: bool,
 }
 
 #[derive(Debug)]
@@ -182,6 +183,7 @@ impl Space {
         const MAX_PLANET_SIZE: f64 = 100.0;
         const PATH_VARIANCE: f64 = 0.1; // applied to radians
         const CRAWLER_PERCENTAGE: f64 = 0.5;
+        const BOUNCY_PERCENTAGE: f64 = 0.5;
 
 
         // use an absolute bug count to index bugs so that we can safely delete them even while
@@ -193,12 +195,13 @@ impl Space {
         let range_distance = Range::new(MIN_PLANET_DISTANCE, MAX_PLANET_DISTANCE);
         let range_radius = Range::new(MIN_PLANET_SIZE, MAX_PLANET_SIZE);
         let range_direction = Range::new(-PI * PATH_VARIANCE, PI * PATH_VARIANCE);
-        let range_crawler_exists = Range::new(0.0, 1.0);
+        let range_percent = Range::new(0.0, 1.0);
         let range_bool = Range::new(0, 2);
         let mut rng = rand::thread_rng();
 
         self.areas.insert((0, 0),
                           (vec![Planet {
+                                    bouncy: false,
                                     radius: 50.0,
                                     pos: pt(0.0, 0.0),
                                 }],
@@ -215,6 +218,7 @@ impl Space {
             let planet = Planet {
                 pos: pos,
                 radius: radius,
+                bouncy: range_percent.ind_sample(&mut rng) > BOUNCY_PERCENTAGE,
             };
             let area = Self::area_for_point(pos);
             self.areas.entry(area).or_insert((vec![], HashMap::new()));
@@ -224,7 +228,7 @@ impl Space {
             prev_pos = pos;
             prev_rot = direction;
             // and the bug
-            if range_crawler_exists.ind_sample(&mut rng) > CRAWLER_PERCENTAGE {
+            if range_percent.ind_sample(&mut rng) > CRAWLER_PERCENTAGE {
                 let rot = range_circle.ind_sample(&mut rng);
                 let planet_num = self.areas[&area].0.len() - 1;
                 self.areas
