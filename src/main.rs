@@ -88,7 +88,7 @@ pub struct App {
     debug: bool,
     // rendering state
     // glyphs: Glyphs
-    minimap: G2dTexture<'static>,
+    minimap: G2dTexture,
     space_bounds: (Point, Point), // min and max
     // gameplay state
     space: Space,
@@ -616,7 +616,7 @@ impl App {
 fn generate_minimap(window: &mut PistonWindow,
                     space: &Space,
                     (min, max): (Point, Point))
-                    -> G2dTexture<'static> {
+                    -> G2dTexture {
     let mut canvas: im::ImageBuffer<im::Rgba<u8>, Vec<u8>> =
         im::ImageBuffer::from_pixel(MINI_WIDTH as u32,
                                     MINI_HEIGHT as u32,

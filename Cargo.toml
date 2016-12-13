@@ -7,7 +7,7 @@ authors = ["radix"]
 name = "main"
 
 [dependencies]
-piston_window = "0.58.0"
+piston_window = "0.59.0"
 ncollide = "0.10.0"
 nalgebra = "0.9.*"
 rand = "0.3.*"
