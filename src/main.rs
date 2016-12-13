@@ -73,11 +73,7 @@ type Transform = [[f64; 3]; 2];
 
 
 /// Check if a circle is in the current viewport.
-fn circle_in_view(point: Point,
-                  radius: f64,
-                  camera: Point,
-                  view_size: piston_window::Size)
-                  -> bool {
+fn circle_in_view(point: Point, radius: f64, camera: Point, view_size: Size) -> bool {
     point.x + radius > camera.x && point.x - radius < camera.x + view_size.width as f64 ||
     point.y + radius > camera.y && point.y - radius < camera.y + view_size.height as f64
 }
@@ -109,7 +105,7 @@ pub struct App {
 impl App {
     fn debug(&self,
              g: &mut G2d,
-             context: &piston_window::Context,
+             context: &Context,
              glyphs: &mut Glyphs,
              color: [f32; 4],
              transform: Transform,
@@ -193,7 +189,7 @@ impl App {
                    glyphs: &mut Glyphs,
                    ship_pos: Point,
                    camera: Transform,
-                   context: &piston_window::Context,
+                   context: &Context,
                    g: &mut G2d) {
         let square = rectangle::square(0.0, 0.0, SHIP_SIZE);
         let ship_transform = camera.trans(ship_pos.x, ship_pos.y)
@@ -212,7 +208,7 @@ impl App {
                       glyphs: &mut Glyphs,
                       planets: Vec<(PlanetIndex, &Planet)>,
                       camera: Transform,
-                      context: &piston_window::Context,
+                      context: &Context,
                       g: &mut G2d,
                       view_size: Size) {
         for (pidx, planet) in planets {
@@ -530,7 +526,7 @@ impl App {
 
     // Update the camera so that the ship stays in view with a margin around the screen.
     fn update_camera(&self,
-                     view_size: piston_window::Size,
+                     view_size: Size,
                      on_planet: Option<Point>,
                      camera_pos: Point,
                      ship_pos: Point)
