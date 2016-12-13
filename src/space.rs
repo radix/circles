@@ -21,7 +21,7 @@ const MAX_PLANET_SIZE: f64 = 100.0;
 const PATH_VARIANCE: f64 = 0.1; // applied to radians
 const CRAWLER_PERCENTAGE: f64 = 0.5;
 const BOUNCY_PERCENTAGE: f64 = 0.5;
-
+const NUM_PLANETS: u32 = 3;
 
 #[derive(Debug)]
 pub struct Planet {
@@ -234,7 +234,7 @@ impl Space {
         let mut prev_pos = pt(0.0, 0.0);
         let mut prev_rot = range_circle.ind_sample(&mut rng);
 
-        for _ in 0..25 {
+        for _ in 0..NUM_PLANETS {
             let radius = range_radius.ind_sample(&mut rng);
             let distance = range_distance.ind_sample(&mut rng);
             let direction = range_direction.ind_sample(&mut rng);

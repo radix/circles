@@ -505,7 +505,6 @@ impl App {
                 query::contact(&na_ship_pos, &ship_ball, &planet_pos, &planet_ball, -1.0);
             if let Some(_) = collided {
                 // We are landing on a new planet
-                println!("Landing on new planet: {:?}", planet_index);
                 self.attached_planet = planet_index;
                 self.flying = false;
                 self.height = planet.radius + (SHIP_SIZE / 2.0);
@@ -626,28 +625,30 @@ impl App {
     }
 }
 
-fn draw_circle(canvas: &mut im::ImageBuffer<im::Rgba<u8>, Vec<u8>>,
+fn fill_circle(canvas: &mut im::ImageBuffer<im::Rgba<u8>, Vec<u8>>,
                color: im::Rgba<u8>,
                radius: i32,
                x0: i32,
                y0: i32) {
-    println!("Drawing planet at {},{}", x0, y0);
     let mut x = radius;
     let mut y = 0;
     let mut err = 0;
     while x >= y {
-        println!("Drawing around {},{}", x, y);
-        canvas.put_pixel((x0 + x) as u32, (y0 + y) as u32, color);
-        canvas.put_pixel((x0 + y) as u32, (y0 + x) as u32, color);
-        canvas.put_pixel((x0 - y) as u32, (y0 + x) as u32, color);
-        canvas.put_pixel((x0 - x) as u32, (y0 + y) as u32, color);
-        canvas.put_pixel((x0 - x) as u32, (y0 - y) as u32, color);
-        canvas.put_pixel((x0 - y) as u32, (y0 - x) as u32, color);
-        canvas.put_pixel((x0 + y) as u32, (y0 - x) as u32, color);
-        canvas.put_pixel((x0 + x) as u32, (y0 - y) as u32, color);
+        // we draw horizontal lines
+        for this_x in (x0 - y)..(x0 + y) {
+            canvas.put_pixel(this_x as u32, (y0 + x) as u32, color);
+        }
+        for this_x in (x0 - x)..(x0 + x) {
+            canvas.put_pixel(this_x as u32, (y0 + y) as u32, color);
+        }
+        for this_x in (x0 - y)..(x0 + y) {
+            canvas.put_pixel(this_x as u32, (y0 - x) as u32, color);
+        }
+        for this_x in (x0 - x)..(x0 + x) {
+            canvas.put_pixel(this_x as u32, (y0 - y) as u32, color);
+        }
         y += 1;
         err += 1 * 2 * y;
-        println!("err {} x {}", err, x);
         if 2 * (err - x) + 1 > 0 {
             x -= 1;
             err += 1 - 2 * x;
@@ -676,14 +677,7 @@ fn generate_minimap(window: &mut PistonWindow,
                      max: Point) {
         let (mini_x, mini_y) = shrink_to_bounds(MINI_WIDTH, MINI_HEIGHT, min, max, pos);
         let rad = radius / ((max.x - min.x) / MINI_WIDTH);
-        println!("bound min {} bound max {} original radius {} little rad {} mini pos {},{}",
-                 min,
-                 max,
-                 radius,
-                 rad as i32,
-                 mini_x,
-                 mini_y);
-        draw_circle(&mut canvas, color, rad as i32, mini_x as i32, mini_y as i32);
+        fill_circle(&mut canvas, color, rad as i32, mini_x as i32, mini_y as i32);
     }
 
     for planet in space.get_all_planets() {
