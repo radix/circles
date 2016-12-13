@@ -14,6 +14,14 @@ use ncollide::bounding_volume::BoundingVolume;
 const AREA_WIDTH: f64 = 2560.0;
 const AREA_HEIGHT: f64 = 2560.0;
 
+const MIN_PLANET_DISTANCE: f64 = 150.0;
+const MAX_PLANET_DISTANCE: f64 = 400.0;
+const MIN_PLANET_SIZE: f64 = 35.0;
+const MAX_PLANET_SIZE: f64 = 100.0;
+const PATH_VARIANCE: f64 = 0.1; // applied to radians
+const CRAWLER_PERCENTAGE: f64 = 0.5;
+const BOUNCY_PERCENTAGE: f64 = 0.5;
+
 
 #[derive(Debug)]
 pub struct Planet {
@@ -86,6 +94,7 @@ impl Space {
         self.current_point
     }
 
+    /// Get an AABB that contains all of the planets in this space, plus a margin.
     pub fn get_space_bounds(&self) -> (Point, Point) {
         let aabb = self.get_all_planets()
             .iter()
@@ -94,6 +103,7 @@ impl Space {
             });
         let aabb = aabb.merged(&ncollide::bounding_volume::aabb(&Ball::new(1.0),
                                                                 &coll_pt(self.get_magic_planet())));
+        let aabb = aabb.loosened(MAX_PLANET_SIZE * 10.0);
 
         let min = aabb.mins();
         let max = aabb.maxs();
@@ -201,15 +211,6 @@ impl Space {
 
     /// Generate planets around the current center point
     fn generate_level(&mut self) {
-        const MIN_PLANET_DISTANCE: f64 = 150.0;
-        const MAX_PLANET_DISTANCE: f64 = 400.0;
-        const MIN_PLANET_SIZE: f64 = 35.0;
-        const MAX_PLANET_SIZE: f64 = 100.0;
-        const PATH_VARIANCE: f64 = 0.1; // applied to radians
-        const CRAWLER_PERCENTAGE: f64 = 0.5;
-        const BOUNCY_PERCENTAGE: f64 = 0.5;
-
-
         // use an absolute bug count to index bugs so that we can safely delete them even while
         // looping over them.
         // I use Atomic only so I can avoid "unsafe" blocks which would be needed for static mut

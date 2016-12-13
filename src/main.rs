@@ -158,16 +158,25 @@ impl App {
     }
 
     fn render_minimap(&self, context: &Context, g: &mut G2d) {
-        image(&self.minimap, context.transform.trans(50.0, 50.0), g);
-        let (mini_x, mini_y) = shrink_to_bounds(MINI_WIDTH,
-                                                MINI_HEIGHT,
-                                                self.space_bounds.0,
-                                                self.space_bounds.1,
-                                                self.space.get_focus());
-        rectangle(RED,
-                  rectangle::square(0.0, 0.0, 1.0),
-                  context.transform.trans(50.0 + mini_x as f64, 50.0 + mini_y as f64),
-                  g);
+        let trans = context.transform.trans(50.0, 50.0);
+        image(&self.minimap, trans, g);
+        // draw a dot representing the ship
+        {
+            let (mini_x, mini_y) = shrink_to_bounds(MINI_WIDTH,
+                                                    MINI_HEIGHT,
+                                                    self.space_bounds.0,
+                                                    self.space_bounds.1,
+                                                    self.space.get_focus());
+            rectangle(RED,
+                      rectangle::square(0.0, 0.0, 1.0),
+                      trans.trans(mini_x as f64, mini_y as f64),
+                      g);
+        }
+        {
+            let r =
+                rectangle::rectangle_by_corners(-1.0, -1.0, MINI_WIDTH + 1.0, MINI_HEIGHT + 1.0);
+            Rectangle::new_border(WHITE, 1.0).draw(r, &context.draw_state, trans, g);
+        }
     }
 
     fn render_fps(&self, glyphs: &mut Glyphs, fps: usize, context: &Context, g: &mut G2d) {
@@ -617,6 +626,35 @@ impl App {
     }
 }
 
+fn draw_circle(canvas: &mut im::ImageBuffer<im::Rgba<u8>, Vec<u8>>,
+               color: im::Rgba<u8>,
+               radius: i32,
+               x0: i32,
+               y0: i32) {
+    println!("Drawing planet at {},{}", x0, y0);
+    let mut x = radius;
+    let mut y = 0;
+    let mut err = 0;
+    while x >= y {
+        println!("Drawing around {},{}", x, y);
+        canvas.put_pixel((x0 + x) as u32, (y0 + y) as u32, color);
+        canvas.put_pixel((x0 + y) as u32, (y0 + x) as u32, color);
+        canvas.put_pixel((x0 - y) as u32, (y0 + x) as u32, color);
+        canvas.put_pixel((x0 - x) as u32, (y0 + y) as u32, color);
+        canvas.put_pixel((x0 - x) as u32, (y0 - y) as u32, color);
+        canvas.put_pixel((x0 - y) as u32, (y0 - x) as u32, color);
+        canvas.put_pixel((x0 + y) as u32, (y0 - x) as u32, color);
+        canvas.put_pixel((x0 + x) as u32, (y0 - y) as u32, color);
+        y += 1;
+        err += 1 * 2 * y;
+        println!("err {} x {}", err, x);
+        if 2 * (err - x) + 1 > 0 {
+            x -= 1;
+            err += 1 - 2 * x;
+        }
+    }
+}
+
 fn generate_minimap(window: &mut PistonWindow,
                     space: &Space,
                     (min, max): (Point, Point))
@@ -630,20 +668,34 @@ fn generate_minimap(window: &mut PistonWindow,
     let magic_pixel = im::Rgba([255, 0, 0, 255]);
     canvas.put_pixel(100, 50, planet_pixel);
 
-    fn render_planet(canvas: &mut im::ImageBuffer<im::Rgba<u8>, Vec<u8>>,
+    fn render_planet(mut canvas: &mut im::ImageBuffer<im::Rgba<u8>, Vec<u8>>,
                      color: im::Rgba<u8>,
                      pos: Point,
+                     radius: f64,
                      min: Point,
                      max: Point) {
         let (mini_x, mini_y) = shrink_to_bounds(MINI_WIDTH, MINI_HEIGHT, min, max, pos);
-        canvas.put_pixel(mini_x, mini_y, color);
+        let rad = radius / ((max.x - min.x) / MINI_WIDTH);
+        println!("bound min {} bound max {} original radius {} little rad {} mini pos {},{}",
+                 min,
+                 max,
+                 radius,
+                 rad as i32,
+                 mini_x,
+                 mini_y);
+        draw_circle(&mut canvas, color, rad as i32, mini_x as i32, mini_y as i32);
     }
 
     for planet in space.get_all_planets() {
         let pixel = if planet.bouncy { bouncy_pixel } else { planet_pixel };
-        render_planet(&mut canvas, pixel, planet.pos, min, max);
+        render_planet(&mut canvas, pixel, planet.pos, planet.radius, min, max);
     }
-    render_planet(&mut canvas, magic_pixel, space.get_magic_planet(), min, max);
+    render_planet(&mut canvas,
+                  magic_pixel,
+                  space.get_magic_planet(),
+                  MAGIC_PLANET_SIZE,
+                  min,
+                  max);
     Texture::from_image(&mut window.factory, &canvas, &TextureSettings::new()).unwrap()
 }
 

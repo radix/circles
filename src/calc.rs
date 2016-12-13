@@ -44,6 +44,8 @@ pub fn coll_pt(point: Point) -> Isometry2<f64> {
     Isometry2::new(Vector2::new(point.x, point.y), na::zero())
 }
 
+
+/// Given
 pub fn shrink_to_bounds(mini_width: f64,
                         mini_height: f64,
                         min: Point,
