@@ -131,6 +131,17 @@ impl App {
             let camera = c.transform.trans(-self.camera_pos.x, -self.camera_pos.y);
             clear(BLACK, g);
 
+            let nearest_beam = [ship_pos.x,
+                                ship_pos.y,
+                                self.closest_planet_coords.x,
+                                self.closest_planet_coords.y];
+            line(GREEN, 1.0, nearest_beam, camera, g);
+
+            // Draw the attached beam
+            let attached = &self.space.get_planet(self.attached_planet);
+            let attached_beam = [ship_pos.x, ship_pos.y, attached.pos.x, attached.pos.y];
+            line(BLUE, 1.0, attached_beam, camera, g);
+
             self.render_ship(glyphs, ship_pos, camera, &c, g);
             self.render_planets(glyphs, planets, camera, &c, g, view_size);
             self.render_bugs(bugs, camera, g, view_size);
@@ -140,19 +151,9 @@ impl App {
                 self.render_fps(glyphs, fps, &c, g);
             }
 
-            let nearest_beam = [ship_pos.x,
-                                ship_pos.y,
-                                self.closest_planet_coords.x,
-                                self.closest_planet_coords.y];
-            line(GREEN, 1.0, nearest_beam, camera, g);
-
-            self.render_hint(ship_pos, camera, g);
-            // Draw the attached beam
-            let attached = &self.space.get_planet(self.attached_planet);
-            let attached_beam = [ship_pos.x, ship_pos.y, attached.pos.x, attached.pos.y];
-            line(BLUE, 1.0, attached_beam, camera, g);
             self.render_score(glyphs, &c, g);
             self.render_minimap(&c, g);
+            self.render_hint(ship_pos, camera, g);
         });
     }
 
@@ -325,7 +326,7 @@ impl App {
             self.update_shoot(target, ship_pos, args.dt)
         }
 
-        self.update_cull_bullets(ship_pos, args.dt);
+        self.update_bullets(ship_pos, args.dt);
         self.update_movement(input, args.dt);
         let (closest_planet_idx, closest_planet_distance) = self.update_collision(ship_pos);
         self.update_attach(closest_planet_idx, closest_planet_distance, ship_pos, input);
@@ -364,7 +365,7 @@ impl App {
         }
     }
 
-    fn update_cull_bullets(&mut self, ship_pos: Point, time_delta: f64) {
+    fn update_bullets(&mut self, ship_pos: Point, time_delta: f64) {
         let mut cull_bullets = vec![];
         let mut cull_counter = 0;
         for (idx, bullet) in self.bullets.iter_mut().enumerate() {
