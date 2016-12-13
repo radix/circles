@@ -32,7 +32,7 @@ const FIRE_COOLDOWN: f64 = 0.1;
 const GRAVITY: f64 = 20.0;
 const MAGIC_PLANET_SIZE: f64 = 200.0;
 const MINI_WIDTH: f64 = 200.0;
-const MINI_HEIGHT: f64 = 100.0;
+const MINI_HEIGHT: f64 = 200.0;
 
 const GREEN: [f32; 4] = [0.0, 1.0, 0.0, 1.0];
 const RED: [f32; 4] = [1.0, 0.0, 0.0, 1.0];
@@ -618,7 +618,9 @@ fn generate_minimap(window: &mut PistonWindow,
                     (min, max): (Point, Point))
                     -> G2dTexture<'static> {
     let mut canvas: im::ImageBuffer<im::Rgba<u8>, Vec<u8>> =
-        im::ImageBuffer::new(MINI_WIDTH as u32, MINI_HEIGHT as u32);
+        im::ImageBuffer::from_pixel(MINI_WIDTH as u32,
+                                    MINI_HEIGHT as u32,
+                                    im::Rgba([255, 255, 255, 8]));
     let planet_pixel = im::Rgba([0, 0, 255, 255]);
     let bouncy_pixel = im::Rgba([127, 127, 255, 255]);
     let magic_pixel = im::Rgba([255, 0, 0, 255]);
