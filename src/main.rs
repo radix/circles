@@ -311,7 +311,10 @@ impl App {
         ellipse(GREEN, dot, camera.trans(hint_pos.x, hint_pos.y), g);
     }
 
-    fn update(&mut self, args: &UpdateArgs, view_size: Size, input: &GameInput) {
+    fn update(&mut self, args: &UpdateArgs, window: &mut PistonWindow, input: &GameInput) {
+        // annoyed that I need the whole mutable window for this function. Only because it's
+        // necessary to create a texture.
+        let view_size = window.size();
         if input.toggle_debug {
             self.debug = !self.debug;
         }
@@ -328,7 +331,7 @@ impl App {
 
         self.update_bullets(ship_pos, args.dt);
         self.update_movement(input, args.dt);
-        let (closest_planet_idx, closest_planet_distance) = self.update_collision(ship_pos);
+        let (closest_planet_idx, closest_planet_distance) = self.update_collision(window, ship_pos);
         self.update_attach(closest_planet_idx, closest_planet_distance, ship_pos, input);
 
         // Put a bound on rotation, because maybe something bad will happen if someone spins in one
@@ -346,7 +349,7 @@ impl App {
         };
         self.camera_pos = self.update_camera(view_size, on_planet, self.camera_pos, ship_pos);
 
-        self.update_bugs(ship_pos, args.dt);
+        self.update_bugs(window, ship_pos, args.dt);
         self.space.focus(ship_pos);
     }
 
@@ -435,8 +438,8 @@ impl App {
         }
     }
 
-    fn update_reset(&mut self, win: bool) {
-        self.score += if win { 1 } else { -1 };
+    fn update_reset(&mut self, window: &mut PistonWindow, won: bool) {
+        self.score += if won { 1 } else { -1 };
         self.space = Space::new();
         let attached_planet_idx = self.space.get_first_planet();
         self.attached_planet = attached_planet_idx;
@@ -449,12 +452,16 @@ impl App {
         self.fire_cooldown = 0.0;
         self.exit_speed = 0.0;
         self.rotation = 0.0;
-        // self.minimap = generate_minimap(&self.space);
+        self.space_bounds = self.space.get_space_bounds();
+        self.minimap = generate_minimap(window, &self.space, self.space_bounds);
     }
 
     /// Update game state based on collision.
     /// Returns the closest planet and the distance to it (for use in attachment).
-    fn update_collision(&mut self, ship_pos: Point) -> (PlanetIndex, f64) {
+    fn update_collision(&mut self,
+                        window: &mut PistonWindow,
+                        ship_pos: Point)
+                        -> (PlanetIndex, f64) {
         let ship_ball = Ball::new(SHIP_SIZE / 2.0);
         let na_ship_pos = coll_pt(ship_pos);
         let mut closest_planet_distance = self.height;
@@ -469,7 +476,7 @@ impl App {
                                             &planet_pos,
                                             &planet_ball,
                                             0.0) {
-                self.update_reset(true);
+                self.update_reset(window, true);
                 return (self.attached_planet, self.height);
             }
         }
@@ -570,7 +577,7 @@ impl App {
         }
     }
 
-    fn update_bugs(&mut self, ship_pos: Point, time_delta: f64) {
+    fn update_bugs(&mut self, mut window: &mut PistonWindow, ship_pos: Point, time_delta: f64) {
         let bball = Ball::new(BULLET_SIZE);
         let crawler_ball = Ball::new(CRAWLER_SIZE);
         for (area, crawler_idx) in self.space.get_nearby_bugs() {
@@ -595,7 +602,7 @@ impl App {
                 let uhoh =
                     query::contact(&crawler_pos, &crawler_ball, &na_ship_pos, &ship_ball, 0.0);
                 if let Some(_) = uhoh {
-                    self.update_reset(false);
+                    self.update_reset(&mut window, false);
                     return;
                 }
             }
@@ -740,7 +747,7 @@ fn main() {
             } else {
                 None
             };
-            app.update(&u, window.size(), &input);
+            app.update(&u, &mut window, &input);
             if input.attach {
                 input.attach = false;
             }
