@@ -167,8 +167,11 @@ impl App {
                                                     self.space_bounds.0,
                                                     self.space_bounds.1,
                                                     self.space.get_focus());
+
+            let size = SHIP_SIZE / ((self.space_bounds.1.x - self.space_bounds.0.x) / MINI_WIDTH);
+
             rectangle(RED,
-                      rectangle::square(0.0, 0.0, 1.0),
+                      rectangle::square(0.0, 0.0, size),
                       trans.trans(mini_x as f64, mini_y as f64),
                       g);
         }
@@ -667,7 +670,6 @@ fn generate_minimap(window: &mut PistonWindow,
     let planet_pixel = im::Rgba([0, 0, 255, 255]);
     let bouncy_pixel = im::Rgba([127, 127, 255, 255]);
     let magic_pixel = im::Rgba([255, 0, 0, 255]);
-    canvas.put_pixel(100, 50, planet_pixel);
 
     fn render_planet(mut canvas: &mut im::ImageBuffer<im::Rgba<u8>, Vec<u8>>,
                      color: im::Rgba<u8>,
