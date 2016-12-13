@@ -632,19 +632,10 @@ fn generate_minimap(window: &mut PistonWindow,
     }
 
     for planet in space.get_all_planets() {
-        render_planet(&mut canvas,
-                      if planet.bouncy {
-                          bouncy_pixel
-                      } else {
-                          planet_pixel
-                      },
-                      planet.pos,
-                      min,
-                      max);
+        let pixel = if planet.bouncy { bouncy_pixel } else { planet_pixel };
+        render_planet(&mut canvas, pixel, planet.pos, min, max);
     }
-
     render_planet(&mut canvas, magic_pixel, space.get_magic_planet(), min, max);
-
     Texture::from_image(&mut window.factory, &canvas, &TextureSettings::new()).unwrap()
 }
 
