@@ -1,11 +1,15 @@
 extern crate rand;
+extern crate ncollide;
 
+use ncollide::shape::Ball;
 use std::collections::HashMap;
 use std::f64::consts::PI;
 use std::sync::atomic::{AtomicUsize, Ordering, ATOMIC_USIZE_INIT};
 
 use self::rand::distributions::{IndependentSample, Range};
 use calc::*;
+
+use ncollide::bounding_volume::BoundingVolume;
 
 const AREA_WIDTH: f64 = 2560.0;
 const AREA_HEIGHT: f64 = 2560.0;
@@ -82,8 +86,28 @@ impl Space {
         self.current_point
     }
 
+    pub fn get_space_bounds(&self) -> (Point, Point) {
+        let aabb = self.get_all_planets()
+            .iter()
+            .fold(ncollide::bounding_volume::AABB::new_invalid(), |acc, &p| {
+                acc.merged(&ncollide::bounding_volume::aabb(&Ball::new(1.0), &coll_pt(p.pos)))
+            });
+        let aabb = aabb.merged(&ncollide::bounding_volume::aabb(&Ball::new(1.0),
+                                                                &coll_pt(self.get_magic_planet())));
+
+        let min = aabb.mins();
+        let max = aabb.maxs();
+        (pt(min.x, min.y), pt(max.x, max.y))
+    }
+
+
+
     pub fn get_magic_planet(&self) -> Point {
         self.magic_planet
+    }
+
+    pub fn get_all_planets(&self) -> Vec<&Planet> {
+        self.areas.iter().flat_map(|(_, &(ref planets, _))| planets).collect()
     }
 
     /// Return all nearby planets

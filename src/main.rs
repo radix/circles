@@ -11,8 +11,6 @@ use std::f64::consts::PI;
 use piston_window::*;
 use ncollide::query;
 use ncollide::shape::Ball;
-use ncollide::bounding_volume::BoundingVolume;
-use na::{Isometry2, Vector2};
 
 mod space;
 mod calc;
@@ -33,6 +31,8 @@ const ACCELERATION: f64 = 5.0;
 const FIRE_COOLDOWN: f64 = 0.1;
 const GRAVITY: f64 = 20.0;
 const MAGIC_PLANET_SIZE: f64 = 200.0;
+const MINI_WIDTH: f64 = 200.0;
+const MINI_HEIGHT: f64 = 100.0;
 
 const GREEN: [f32; 4] = [0.0, 1.0, 0.0, 1.0];
 const RED: [f32; 4] = [1.0, 0.0, 0.0, 1.0];
@@ -41,7 +41,6 @@ const LIGHTBLUE: [f32; 4] = [0.5, 0.5, 1.0, 1.0];
 const BLUE: [f32; 4] = [0.0, 0.0, 1.0, 1.0];
 const BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
 const WHITE: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
-
 
 struct GameInput {
     toggle_debug: bool,
@@ -73,10 +72,6 @@ impl GameInput {
 type Transform = [[f64; 3]; 2];
 
 
-fn coll_pt(point: Point) -> Isometry2<f64> {
-    Isometry2::new(Vector2::new(point.x, point.y), na::zero())
-}
-
 /// Check if a circle is in the current viewport.
 fn circle_in_view(point: Point,
                   radius: f64,
@@ -94,6 +89,7 @@ pub struct App {
     // rendering state
     // glyphs: Glyphs
     minimap: G2dTexture<'static>,
+    space_bounds: (Point, Point), // min and max
     // gameplay state
     space: Space,
     score: i8,
@@ -165,7 +161,16 @@ impl App {
     }
 
     fn render_minimap(&self, context: &Context, g: &mut G2d) {
-        image(&self.minimap, context.transform, g);
+        image(&self.minimap, context.transform.trans(50.0, 50.0), g);
+        let (mini_x, mini_y) = shrink_to_bounds(MINI_WIDTH,
+                                                MINI_HEIGHT,
+                                                self.space_bounds.0,
+                                                self.space_bounds.1,
+                                                self.space.get_focus());
+        rectangle(RED,
+                  rectangle::square(0.0, 0.0, 1.0),
+                  context.transform.trans(50.0 + mini_x as f64, 50.0 + mini_y as f64),
+                  g);
     }
 
     fn render_fps(&self, glyphs: &mut Glyphs, fps: usize, context: &Context, g: &mut G2d) {
@@ -608,45 +613,39 @@ impl App {
     }
 }
 
-fn generate_minimap(window: &mut PistonWindow, space: &Space) -> G2dTexture<'static> {
-    const MINI_WIDTH: f64 = 200.0;
-    const MINI_HEIGHT: f64 = 100.0;
-    let mut canvas = im::ImageBuffer::new(MINI_WIDTH as u32, MINI_HEIGHT as u32);
+fn generate_minimap(window: &mut PistonWindow,
+                    space: &Space,
+                    (min, max): (Point, Point))
+                    -> G2dTexture<'static> {
+    let mut canvas: im::ImageBuffer<im::Rgba<u8>, Vec<u8>> =
+        im::ImageBuffer::new(MINI_WIDTH as u32, MINI_HEIGHT as u32);
     let planet_pixel = im::Rgba([0, 0, 255, 255]);
     let bouncy_pixel = im::Rgba([127, 127, 255, 255]);
     let magic_pixel = im::Rgba([255, 0, 0, 255]);
     canvas.put_pixel(100, 50, planet_pixel);
-    // xxx use space.get_all_planets()
-    let aabb = space.get_nearby_planets()
-        .iter()
-        .fold(ncollide::bounding_volume::AABB::new_invalid(),
-              |acc, &(_, p)| {
-                  acc.merged(&ncollide::bounding_volume::aabb(&Ball::new(1.0), &coll_pt(p.pos)))
-              });
 
-    let min = aabb.mins();
-    let max = aabb.maxs();
-    println!("mins & maxs: {} {}", min, max);
-    let width = max.x - min.x;
-    let height = max.y - min.y;
-    println!("width & height: {} {}", width, height);
-
-    for (_, planet) in space.get_nearby_planets() {
-        let percent_x = (planet.pos.x - min.x) / width;
-        let percent_y = (planet.pos.y - min.y) / height;
-        let mini_x = percent_x * MINI_WIDTH;
-        let mini_y = percent_y * MINI_HEIGHT;
-        println!("planet pos: {}", planet.pos);
-        println!("'percents': {} {}", percent_x, percent_y);
-        println!("What is minis {} {}", mini_x, mini_y);
-        canvas.put_pixel((mini_x).floor() as u32,
-                         (mini_y).floor() as u32,
-                         if planet.bouncy {
-                             bouncy_pixel
-                         } else {
-                             planet_pixel
-                         });
+    fn render_planet(canvas: &mut im::ImageBuffer<im::Rgba<u8>, Vec<u8>>,
+                     color: im::Rgba<u8>,
+                     pos: Point,
+                     min: Point,
+                     max: Point) {
+        let (mini_x, mini_y) = shrink_to_bounds(MINI_WIDTH, MINI_HEIGHT, min, max, pos);
+        canvas.put_pixel(mini_x, mini_y, color);
     }
+
+    for planet in space.get_all_planets() {
+        render_planet(&mut canvas,
+                      if planet.bouncy {
+                          bouncy_pixel
+                      } else {
+                          planet_pixel
+                      },
+                      planet.pos,
+                      min,
+                      max);
+    }
+
+    render_planet(&mut canvas, magic_pixel, space.get_magic_planet(), min, max);
 
     Texture::from_image(&mut window.factory, &canvas, &TextureSettings::new()).unwrap()
 }
@@ -671,7 +670,7 @@ fn main() {
     // Create a new game and run it.
     let space = Space::new();
     let attached_planet_idx = space.get_first_planet();
-
+    let space_bounds = space.get_space_bounds();
     let mut app = App {
         score: 0,
         debug: false,
@@ -685,7 +684,8 @@ fn main() {
         attached_planet: attached_planet_idx,
         closest_planet_coords: space.get_planet(attached_planet_idx).pos,
         bullets: vec![],
-        minimap: generate_minimap(&mut window, &space),
+        space_bounds: space_bounds,
+        minimap: generate_minimap(&mut window, &space, space_bounds),
         space: space,
     };
 
