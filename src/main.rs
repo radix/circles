@@ -172,7 +172,7 @@ impl App {
 
             rectangle(RED,
                       rectangle::square(0.0, 0.0, size),
-                      trans.trans(mini_x as f64, mini_y as f64),
+                      trans.trans(mini_x as f64, mini_y as f64).rot_rad(self.rotation),
                       g);
         }
         {
