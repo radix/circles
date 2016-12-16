@@ -1,7 +1,9 @@
 extern crate rand;
 extern crate ncollide;
+extern crate nalgebra as na;
 
 use ncollide::shape::Ball;
+use ncollide::bounding_volume::aabb;
 use std::collections::HashMap;
 use std::f64::consts::PI;
 use std::sync::atomic::{AtomicUsize, Ordering, ATOMIC_USIZE_INIT};
@@ -14,6 +16,7 @@ use ncollide::bounding_volume::BoundingVolume;
 const AREA_WIDTH: f64 = 2560.0;
 const AREA_HEIGHT: f64 = 2560.0;
 
+pub const MAGIC_PLANET_SIZE: f64 = 200.0;
 const MIN_PLANET_DISTANCE: f64 = 150.0;
 const MAX_PLANET_DISTANCE: f64 = 400.0;
 const MIN_PLANET_SIZE: f64 = 35.0;
@@ -62,6 +65,7 @@ pub struct CrawlerBug {
 }
 
 pub type Area = (i32, i32);
+type BoundingBox = ncollide::bounding_volume::AABB<na::Point2<f64>>;
 
 /// Space is responsible for holding all the planets in the universe, generating planets when the
 /// ship moves through space, and also giving a view of nearby planets. It is responsible for
@@ -96,17 +100,27 @@ impl Space {
 
     /// Get an AABB that contains all of the planets in this space, plus a margin.
     pub fn get_space_bounds(&self) -> (Point, Point) {
-        let aabb = self.get_all_planets()
+        let bbox = aabb(&Ball::new(1.0), &coll_pt(self.get_magic_planet()));
+        let bbox = self.get_all_planets()
             .iter()
-            .fold(ncollide::bounding_volume::AABB::new_invalid(), |acc, &p| {
-                acc.merged(&ncollide::bounding_volume::aabb(&Ball::new(1.0), &coll_pt(p.pos)))
-            });
-        let aabb = aabb.merged(&ncollide::bounding_volume::aabb(&Ball::new(1.0),
-                                                                &coll_pt(self.get_magic_planet())));
-        let aabb = aabb.loosened(MAX_PLANET_SIZE * 10.0);
+            .fold(bbox,
+                  |acc, &p| acc.merged(&aabb(&Ball::new(1.0), &coll_pt(p.pos))));
 
-        let min = aabb.mins();
-        let max = aabb.maxs();
+        // frick, ncollide doesn't have a way to loosen *in a direction*, so we have to create a
+        // box where we want to expand.
+        let bbox = {
+            let min = bbox.mins();
+            let max = bbox.maxs();
+            let width = max.x - min.x;
+            let height = max.y - min.y;
+            let center_ball = Ball::new((height / 2.0).max((width / 2.0)));
+            let center_pt = bbox.center();
+            let center_pt = na::Isometry2::new(na::Vector2::new(center_pt.x, center_pt.y),
+                                               na::zero());
+            bbox.merged(&aabb(&center_ball, &center_pt))
+        };
+        let min = bbox.mins();
+        let max = bbox.maxs();
         (pt(min.x, min.y), pt(max.x, max.y))
     }
 

@@ -3,7 +3,6 @@ use std::fmt;
 
 use na::{Isometry2, Vector2};
 
-
 #[derive(Debug, Clone, Copy)]
 pub struct Point {
     pub x: f64,

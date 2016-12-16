@@ -30,9 +30,7 @@ const BULLET_SIZE: f64 = 5.0;
 const ACCELERATION: f64 = 5.0;
 const FIRE_COOLDOWN: f64 = 0.1;
 const GRAVITY: f64 = 20.0;
-const MAGIC_PLANET_SIZE: f64 = 200.0;
-const MINI_WIDTH: f64 = 200.0;
-const MINI_HEIGHT: f64 = 200.0;
+const MINI_SIZE: f64 = 200.0;
 
 const GREEN: [f32; 4] = [0.0, 1.0, 0.0, 1.0];
 const RED: [f32; 4] = [1.0, 0.0, 0.0, 1.0];
@@ -162,13 +160,13 @@ impl App {
         image(&self.minimap, trans, g);
         // draw a dot representing the ship
         {
-            let (mini_x, mini_y) = shrink_to_bounds(MINI_WIDTH,
-                                                    MINI_HEIGHT,
+            let (mini_x, mini_y) = shrink_to_bounds(MINI_SIZE,
+                                                    MINI_SIZE,
                                                     self.space_bounds.0,
                                                     self.space_bounds.1,
                                                     self.space.get_focus());
 
-            let size = SHIP_SIZE / ((self.space_bounds.1.x - self.space_bounds.0.x) / MINI_WIDTH);
+            let size = SHIP_SIZE / ((self.space_bounds.1.x - self.space_bounds.0.x) / MINI_SIZE);
 
             rectangle(RED,
                       rectangle::square(0.0, 0.0, size),
@@ -176,8 +174,7 @@ impl App {
                       g);
         }
         {
-            let r =
-                rectangle::rectangle_by_corners(-1.0, -1.0, MINI_WIDTH + 1.0, MINI_HEIGHT + 1.0);
+            let r = rectangle::rectangle_by_corners(0.0, 0.0, MINI_SIZE, MINI_SIZE);
             Rectangle::new_border(WHITE, 1.0).draw(r, &context.draw_state, trans, g);
         }
     }
@@ -636,20 +633,21 @@ fn fill_circle(canvas: &mut im::ImageBuffer<im::Rgba<u8>, Vec<u8>>,
     let mut x = radius;
     let mut y = 0;
     let mut err = 0;
+    let mini_size = MINI_SIZE as i32;
+
+    let mut draw_line = |x_center: i32, x_offset: i32, y: i32| {
+        for this_x in (x_center - x_offset)..(x_center + x_offset) {
+            if this_x >= 0 && this_x < mini_size && y >= 0 && y < mini_size {
+                canvas.put_pixel(this_x as u32, y as u32, color);
+            }
+        }
+    };
     while x >= y {
         // we draw horizontal lines
-        for this_x in (x0 - y)..(x0 + y) {
-            canvas.put_pixel(this_x as u32, (y0 + x) as u32, color);
-        }
-        for this_x in (x0 - x)..(x0 + x) {
-            canvas.put_pixel(this_x as u32, (y0 + y) as u32, color);
-        }
-        for this_x in (x0 - y)..(x0 + y) {
-            canvas.put_pixel(this_x as u32, (y0 - x) as u32, color);
-        }
-        for this_x in (x0 - x)..(x0 + x) {
-            canvas.put_pixel(this_x as u32, (y0 - y) as u32, color);
-        }
+        draw_line(x0, y, y0 + x);
+        draw_line(x0, x, y0 + y);
+        draw_line(x0, y, y0 - x);
+        draw_line(x0, x, y0 - y);
         y += 1;
         err += 1 * 2 * y;
         if 2 * (err - x) + 1 > 0 {
@@ -664,34 +662,26 @@ fn generate_minimap(window: &mut PistonWindow,
                     (min, max): (Point, Point))
                     -> G2dTexture {
     let mut canvas: im::ImageBuffer<im::Rgba<u8>, Vec<u8>> =
-        im::ImageBuffer::from_pixel(MINI_WIDTH as u32,
-                                    MINI_HEIGHT as u32,
+        im::ImageBuffer::from_pixel(MINI_SIZE as u32,
+                                    MINI_SIZE as u32,
                                     im::Rgba([255, 255, 255, 8]));
     let planet_pixel = im::Rgba([0, 0, 255, 255]);
     let bouncy_pixel = im::Rgba([127, 127, 255, 255]);
     let magic_pixel = im::Rgba([255, 0, 0, 255]);
 
-    fn render_planet(mut canvas: &mut im::ImageBuffer<im::Rgba<u8>, Vec<u8>>,
-                     color: im::Rgba<u8>,
-                     pos: Point,
-                     radius: f64,
-                     min: Point,
-                     max: Point) {
-        let (mini_x, mini_y) = shrink_to_bounds(MINI_WIDTH, MINI_HEIGHT, min, max, pos);
-        let rad = radius / ((max.x - min.x) / MINI_WIDTH);
-        fill_circle(&mut canvas, color, rad as i32, mini_x as i32, mini_y as i32);
-    }
+    {
+        let mut render_planet = |color, pos, radius| {
+            let (mini_x, mini_y) = shrink_to_bounds(MINI_SIZE, MINI_SIZE, min, max, pos);
+            let rad = radius / ((max.x - min.x) / MINI_SIZE);
+            fill_circle(&mut canvas, color, rad as i32, mini_x as i32, mini_y as i32);
+        };
 
-    for planet in space.get_all_planets() {
-        let pixel = if planet.bouncy { bouncy_pixel } else { planet_pixel };
-        render_planet(&mut canvas, pixel, planet.pos, planet.radius, min, max);
+        for planet in space.get_all_planets() {
+            let pixel = if planet.bouncy { bouncy_pixel } else { planet_pixel };
+            render_planet(pixel, planet.pos, planet.radius);
+        }
+        render_planet(magic_pixel, space.get_magic_planet(), MAGIC_PLANET_SIZE);
     }
-    render_planet(&mut canvas,
-                  magic_pixel,
-                  space.get_magic_planet(),
-                  MAGIC_PLANET_SIZE,
-                  min,
-                  max);
     Texture::from_image(&mut window.factory, &canvas, &TextureSettings::new()).unwrap()
 }
 
