@@ -104,6 +104,12 @@ impl App {
     }
 
     pub fn update(&mut self, args: &UpdateArgs, window: &mut PistonWindow) {
+        self.input.shoot_target = if self.input.shooting {
+            self.input.cursor.map(|c| pt(self.camera_pos.x + c[0], self.camera_pos.y + c[1]))
+        } else {
+            None
+        };
+
         // annoyed that I need the whole mutable window for this function. Only because it's
         // necessary to create a texture.
         let view_size = window.size();
@@ -143,6 +149,14 @@ impl App {
 
         self.update_bugs(window, ship_pos, args.dt);
         self.space.focus(ship_pos);
+
+        if self.input.attach {
+            self.input.attach = false;
+        }
+        if self.input.toggle_debug {
+            self.input.toggle_debug = false;
+        }
+
     }
 
     fn update_shoot(&mut self, target: Point, ship_pos: Point, time_delta: f64) {

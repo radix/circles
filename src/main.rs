@@ -14,7 +14,6 @@ mod game;
 mod render;
 
 use game::App;
-use calc::pt;
 
 fn main() {
     let mut window: PistonWindow = WindowSettings::new("Circles", [1024, 768])
@@ -39,20 +38,7 @@ fn main() {
     while let Some(e) = window.next() {
         app.gather_input(&e);
         if let Some(u) = e.update_args() {
-            // FIXME this shouldn't use app.camera_pos. basically input handling should be moved
-            // somewhere else, like maybe into App
-            app.input.shoot_target = if app.input.shooting {
-                app.input.cursor.map(|c| pt(app.camera_pos.x + c[0], app.camera_pos.y + c[1]))
-            } else {
-                None
-            };
             app.update(&u, &mut window);
-            if app.input.attach {
-                app.input.attach = false;
-            }
-            if app.input.toggle_debug {
-                app.input.toggle_debug = false;
-            }
         }
         app.render(&mut window, &e, &mut glyphs, &mut fps_counter);
     }
