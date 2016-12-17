@@ -11,6 +11,7 @@ use piston_window::*;
 mod space;
 mod calc;
 mod game;
+mod render;
 
 use game::*;
 use calc::pt;
