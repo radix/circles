@@ -1,5 +1,6 @@
 use std::f64::consts::PI;
-use piston_window::{G2dTexture, TextureSettings, UpdateArgs, PistonWindow, Texture, Size, Window};
+use piston_window::{Event, G2dTexture, TextureSettings, UpdateArgs, PistonWindow, Texture, Size,
+                    Window, MouseButton, Button, Key, MouseCursorEvent, PressEvent, ReleaseEvent};
 use ncollide::query;
 use ncollide::shape::Ball;
 
@@ -30,7 +31,9 @@ pub struct GameInput {
     pub up: bool,
     pub jump: bool,
     pub shoot_target: Option<Point>,
+    pub shooting: bool,
     pub attach: bool,
+    pub cursor: Option<[f64; 2]>,
 }
 
 impl GameInput {
@@ -44,11 +47,14 @@ impl GameInput {
             jump: false,
             shoot_target: None,
             attach: false,
+            cursor: None,
+            shooting: false,
         }
     }
 }
 
 pub struct App {
+    pub input: GameInput,
     // meta-state? or something
     pub debug: bool,
     // rendering state
@@ -78,6 +84,7 @@ impl App {
         let attached_planet_idx = space.get_first_planet();
         let space_bounds = space.get_space_bounds();
         App {
+            input: GameInput::new(),
             score: 0,
             debug: false,
             camera_pos: pt(-0.0, -0.0),
@@ -96,11 +103,11 @@ impl App {
         }
     }
 
-    pub fn update(&mut self, args: &UpdateArgs, window: &mut PistonWindow, input: &GameInput) {
+    pub fn update(&mut self, args: &UpdateArgs, window: &mut PistonWindow) {
         // annoyed that I need the whole mutable window for this function. Only because it's
         // necessary to create a texture.
         let view_size = window.size();
-        if input.toggle_debug {
+        if self.input.toggle_debug {
             self.debug = !self.debug;
         }
         let ship_pos = {
@@ -110,14 +117,14 @@ impl App {
 
         // It would be nice if more of these methods took &self instead of &mut self, and we
         // assigned the results
-        if let Some(target) = input.shoot_target {
+        if let Some(target) = self.input.shoot_target {
             self.update_shoot(target, ship_pos, args.dt)
         }
 
         self.update_bullets(ship_pos, args.dt);
-        self.update_movement(input, args.dt);
+        self.update_movement(args.dt);
         let (closest_planet_idx, closest_planet_distance) = self.update_collision(window, ship_pos);
-        self.update_attach(closest_planet_idx, closest_planet_distance, ship_pos, input);
+        self.update_attach(closest_planet_idx, closest_planet_distance, ship_pos);
 
         // Put a bound on rotation, because maybe something bad will happen if someone spins in one
         // direction for an hour
@@ -175,31 +182,31 @@ impl App {
         }
     }
 
-    fn update_movement(&mut self, input: &GameInput, time_delta: f64) {
+    fn update_movement(&mut self, time_delta: f64) {
         if !self.flying {
-            if input.up {
+            if self.input.up {
                 self.flying = true;
                 self.exit_speed = FLY_SPEED;
             }
         } else {
             self.height += self.exit_speed;
-            if input.down {
+            if self.input.down {
                 self.exit_speed -= ACCELERATION * time_delta;
             }
-            if input.up {
+            if self.input.up {
                 self.exit_speed += ACCELERATION * time_delta;
             }
         }
 
         if !self.jumping {
-            if input.jump {
+            if self.input.jump {
                 self.jumping = true;
                 self.exit_speed = JUMP_SPEED;
             }
         } else {
             self.exit_speed -= GRAVITY * time_delta;
             self.height += self.exit_speed;
-            if !input.jump {
+            if !self.input.jump {
                 if self.exit_speed > (JUMP_SPEED / 2.0) {
                     self.exit_speed = JUMP_SPEED / 2.0;
                 }
@@ -207,17 +214,17 @@ impl App {
         }
 
         if self.flying || self.jumping {
-            if input.left {
+            if self.input.left {
                 self.rotation -= SPEED * AIR_CONTROL_MOD * time_delta
             }
-            if input.right {
+            if self.input.right {
                 self.rotation += SPEED * AIR_CONTROL_MOD * time_delta
             }
         } else {
-            if input.left {
+            if self.input.left {
                 self.rotation -= SPEED * time_delta;
             }
-            if input.right {
+            if self.input.right {
                 self.rotation += SPEED * time_delta;
             }
         }
@@ -302,9 +309,8 @@ impl App {
     fn update_attach(&mut self,
                      closest_planet_idx: PlanetIndex,
                      closest_planet_distance: f64,
-                     ship_pos: Point,
-                     input: &GameInput) {
-        if input.attach && closest_planet_idx != self.attached_planet {
+                     ship_pos: Point) {
+        if self.input.attach && closest_planet_idx != self.attached_planet {
             self.attached_planet = closest_planet_idx;
             self.exit_speed = 0.0;
             self.rotation = (ship_pos.y - self.closest_planet_coords.y)
@@ -398,6 +404,59 @@ impl App {
                 }
             }
         }
+    }
+
+    pub fn gather_input(&mut self, event: &Event) {
+        self.input.cursor = match event.mouse_cursor_args() {
+            None => self.input.cursor,
+            x => x,
+        };
+        if let Some(press) = event.press_args() {
+            match press {
+                Button::Keyboard(key) => {
+                    match key {
+                        Key::Left | Key::A => self.input.left = true,
+                        Key::Right | Key::E | Key::D => self.input.right = true,
+                        Key::Up | Key::Comma | Key::W => self.input.up = true,
+                        Key::Down | Key::O | Key::S => self.input.down = true,
+                        Key::Space => self.input.jump = true,
+                        x => println!("Keyboard Key {:?}", x),
+                    }
+                }
+                Button::Mouse(key) => {
+                    match key {
+                        MouseButton::Left => self.input.shooting = true,
+                        MouseButton::Right => self.input.attach = true,
+                        x => println!("Mouse Key {:?}", x),
+                    }
+                }
+                x => println!("Unknown Event {:?}", x),
+            }
+        }
+        if let Some(press) = event.release_args() {
+            match press {
+                Button::Keyboard(key) => {
+                    match key {
+                        Key::B => self.input.toggle_debug = true,
+                        Key::Left | Key::A => self.input.left = false,
+                        Key::Right | Key::E | Key::D => self.input.right = false,
+                        Key::Up | Key::Comma | Key::W => self.input.up = false,
+                        Key::Down | Key::O | Key::S => self.input.down = false,
+                        Key::Space => self.input.jump = false,
+                        _ => {}
+                    }
+                }
+                Button::Mouse(key) => {
+                    match key {
+                        MouseButton::Left => self.input.shooting = false,
+                        MouseButton::Right => self.input.attach = false,
+                        _ => {}
+                    }
+                }
+                _ => {}
+            }
+        }
+
     }
 }
 
