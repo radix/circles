@@ -7,13 +7,14 @@ extern crate find_folder;
 extern crate fps_counter;
 extern crate image as im; // "image" conflicts with something from piston_window
 
-use piston_window::*;
+use piston_window::{PistonWindow, MouseButton, WindowSettings, Glyphs, Button, Key, EventLoop,
+                    MouseCursorEvent, PressEvent, ReleaseEvent, UpdateEvent};
 mod space;
 mod calc;
 mod game;
 mod render;
 
-use game::*;
+use game::{App, GameInput};
 use calc::pt;
 
 fn main() {

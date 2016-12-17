@@ -3,13 +3,21 @@ use std::f64::consts::PI;
 use piston_window::*;
 use fps_counter;
 
-use game::*;
-use calc::*;
-use space::*;
+use game::{App, BULLET_SIZE, MINI_SIZE, SHIP_SIZE, CRAWLER_SIZE};
+use calc::{Point, shrink_to_bounds, rotated_position, direction_from_to};
+use space::{Area, Planet, PlanetIndex, MAGIC_PLANET_SIZE};
+
+
+pub const GREEN: [f32; 4] = [0.0, 1.0, 0.0, 1.0];
+pub const RED: [f32; 4] = [1.0, 0.0, 0.0, 1.0];
+pub const DARKRED: [f32; 4] = [0.5, 0.0, 0.0, 1.0];
+pub const LIGHTBLUE: [f32; 4] = [0.5, 0.5, 1.0, 1.0];
+pub const BLUE: [f32; 4] = [0.0, 0.0, 1.0, 1.0];
+pub const BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
+pub const WHITE: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
+
 
 type Transform = [[f64; 3]; 2];
-
-
 
 impl App {
     fn debug(&self,

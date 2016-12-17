@@ -1,12 +1,12 @@
 use std::f64::consts::PI;
-use piston_window::*;
+use piston_window::{G2dTexture, TextureSettings, UpdateArgs, PistonWindow, Texture, Size, Window};
 use ncollide::query;
 use ncollide::shape::Ball;
 
 use im;
 
-use space::*;
-use calc::*;
+use space::{Space, Bullet, PlanetIndex, MAGIC_PLANET_SIZE};
+use calc::{Point, pt, rotated_position, shrink_to_bounds, coll_pt, direction_from_to, lerp};
 
 pub const SHIP_SIZE: f64 = 50.0;
 pub const CRAWLER_SIZE: f64 = 25.0;
@@ -21,14 +21,6 @@ pub const ACCELERATION: f64 = 5.0;
 pub const FIRE_COOLDOWN: f64 = 0.1;
 pub const GRAVITY: f64 = 20.0;
 pub const MINI_SIZE: f64 = 200.0;
-
-pub const GREEN: [f32; 4] = [0.0, 1.0, 0.0, 1.0];
-pub const RED: [f32; 4] = [1.0, 0.0, 0.0, 1.0];
-pub const DARKRED: [f32; 4] = [0.5, 0.0, 0.0, 1.0];
-pub const LIGHTBLUE: [f32; 4] = [0.5, 0.5, 1.0, 1.0];
-pub const BLUE: [f32; 4] = [0.0, 0.0, 1.0, 1.0];
-pub const BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
-pub const WHITE: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
 
 pub struct GameInput {
     pub toggle_debug: bool,
