@@ -9,7 +9,7 @@ use std::f64::consts::PI;
 use std::sync::atomic::{AtomicUsize, Ordering, ATOMIC_USIZE_INIT};
 
 use self::rand::distributions::{IndependentSample, Range};
-use calc::*;
+use calc::{Point, pt, coll_pt, rotated_position};
 
 use ncollide::bounding_volume::BoundingVolume;
 

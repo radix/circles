@@ -1,6 +1,7 @@
 use std::f64::consts::PI;
 
-use piston_window::*;
+use piston_window::{G2d, Glyphs, Window, PistonWindow, Event, Context, Rectangle, Size,
+                    Transformed, clear, rectangle, ellipse, line, image, text};
 use fps_counter;
 
 use game::{App, BULLET_SIZE, MINI_SIZE, SHIP_SIZE, CRAWLER_SIZE};
