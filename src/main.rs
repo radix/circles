@@ -661,14 +661,15 @@ fn generate_minimap(window: &mut PistonWindow,
                     space: &Space,
                     (min, max): (Point, Point))
                     -> G2dTexture {
-    let mut canvas: im::ImageBuffer<im::Rgba<u8>, Vec<u8>> =
-        im::ImageBuffer::from_pixel(MINI_SIZE as u32,
-                                    MINI_SIZE as u32,
-                                    im::Rgba([255, 255, 255, 8]));
     let planet_pixel = im::Rgba([0, 0, 255, 255]);
     let bouncy_pixel = im::Rgba([127, 127, 255, 255]);
     let magic_pixel = im::Rgba([255, 0, 0, 255]);
 
+
+    let mut canvas: im::ImageBuffer<im::Rgba<u8>, Vec<u8>> =
+        im::ImageBuffer::from_pixel(MINI_SIZE as u32,
+                                    MINI_SIZE as u32,
+                                    im::Rgba([255, 255, 255, 8]));
     {
         let mut render_planet = |color, pos, radius| {
             let (mini_x, mini_y) = shrink_to_bounds(MINI_SIZE, MINI_SIZE, min, max, pos);
