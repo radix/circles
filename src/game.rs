@@ -214,10 +214,12 @@ impl App {
             }
         }
 
-        if (!self.jumping) && self.input.jump && !self.input.jumped {
-            self.jumping = true;
-            self.exit_speed = JUMP_SPEED;
-            self.input.jumped = true;
+        if !self.jumping {
+            if self.input.jump && !self.input.jumped {
+                self.jumping = true;
+                self.exit_speed = JUMP_SPEED;
+                self.input.jumped = true;
+            }
         } else {
             self.exit_speed -= GRAVITY * time_delta;
             self.height += self.exit_speed;
