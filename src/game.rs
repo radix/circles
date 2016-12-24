@@ -30,6 +30,7 @@ pub struct GameInput {
     pub down: bool,
     pub up: bool,
     pub jump: bool,
+    pub jumped: bool,
     pub shoot_target: Option<Point>,
     pub shooting: bool,
     pub attach: bool,
@@ -45,6 +46,7 @@ impl GameInput {
             down: false,
             up: false,
             jump: false,
+            jumped: false,
             shoot_target: None,
             attach: false,
             cursor: None,
@@ -212,11 +214,10 @@ impl App {
             }
         }
 
-        if !self.jumping {
-            if self.input.jump {
-                self.jumping = true;
-                self.exit_speed = JUMP_SPEED;
-            }
+        if (!self.jumping) && self.input.jump && !self.input.jumped {
+            self.jumping = true;
+            self.exit_speed = JUMP_SPEED;
+            self.input.jumped = true;
         } else {
             self.exit_speed -= GRAVITY * time_delta;
             self.height += self.exit_speed;
@@ -456,7 +457,10 @@ impl App {
                         Key::Right | Key::E | Key::D => self.input.right = false,
                         Key::Up | Key::Comma | Key::W => self.input.up = false,
                         Key::Down | Key::O | Key::S => self.input.down = false,
-                        Key::Space => self.input.jump = false,
+                        Key::Space => {
+                            self.input.jump = false;
+                            self.input.jumped = false;
+                        }
                         _ => {}
                     }
                 }
@@ -513,7 +517,6 @@ fn generate_minimap(window: &mut PistonWindow,
     let planet_pixel = im::Rgba([0, 0, 255, 255]);
     let bouncy_pixel = im::Rgba([127, 127, 255, 255]);
     let magic_pixel = im::Rgba([255, 0, 0, 255]);
-
 
     let mut canvas: im::ImageBuffer<im::Rgba<u8>, Vec<u8>> =
         im::ImageBuffer::from_pixel(MINI_SIZE as u32,
